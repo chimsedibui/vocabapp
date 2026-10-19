@@ -1,0 +1,53 @@
+{
+  "schema_version": "1.0",
+  "items": [
+    {
+      "deck_key": "daily",
+      "deck_name": "Từ vựng hằng ngày",
+      "term": "retain",
+      "source_language": "en",
+      "target_language": "vi",
+      "sense_key": "primary",
+      "meaning": "giữ lại",
+      "part_of_speech": "verb",
+      "pronunciation": null,
+      "note": null
+    },
+    {
+      "deck_key": "daily",
+      "deck_name": "Từ vựng hằng ngày",
+      "term": "bank",
+      "source_language": "en",
+      "target_language": "vi",
+      "sense_key": "financial",
+      "meaning": "ngân hàng",
+      "part_of_speech": "noun",
+      "pronunciation": null,
+      "note": null
+    },
+    {
+      "deck_key": "daily",
+      "deck_name": "Từ vựng hằng ngày",
+      "term": "bank",
+      "source_language": "en",
+      "target_language": "vi",
+      "sense_key": "river_edge",
+      "meaning": "bờ sông",
+      "part_of_speech": "noun",
+      "pronunciation": null,
+      "note": null
+    },
+    {
+      "deck_key": "daily",
+      "deck_name": "Từ vựng hằng ngày",
+      "term": "resilient",
+      "source_language": "en",
+      "target_language": "vi",
+      "sense_key": "primary",
+      "meaning": null,
+      "part_of_speech": null,
+      "pronunciation": null,
+      "note": null
+    }
+  ]
+}
