@@ -45,3 +45,7 @@ Cấu hình API và secure storage, enrichment/fallback, passage B1+, nhập CSV
 ## Lần phát hành đầu đã xác nhận
 
 [CI v0.2.0](https://github.com/chimsedibui/vocabapp/actions/runs/39204825292) đã hoàn thành đủ version → Android/Windows → publish. [Release công khai](https://github.com/chimsedibui/vocabapp/releases/tag/v0.2.0) có 7 assets: APK, ZIP, installer, 3 checksum và release.json. Cả ba gói đã được tải lại và kiểm manifest; chữ ký APK giữ nguyên từ alpha 0.1.0. Bộ tính version sau khi fetch tag hiện trả 0.2.1+3 cho push app tiếp theo.
+
+## Xác nhận tự tăng version v0.2.1
+
+[Run 39205602755](https://github.com/chimsedibui/vocabapp/actions/runs/39205602755) đã phát hành [v0.2.1](https://github.com/chimsedibui/vocabapp/releases/tag/v0.2.1) từ push sửa workflow. CI tự chọn 0.2.1+3, tạo commit `d8a7395` cập nhật pubspec và tag, không sinh run lặp. Cả hai nền tảng qua test/build. Đã tải lại và đối chiếu SHA-256/size của đủ ba gói với manifest; Windows binary có ProductVersion/FileVersion 0.2.1+3, APK có versionName 0.2.1/versionCode 3 và giữ certificate beta. File cài đặt đã chép vào Downloads trên Windows. Chưa thay thế UAT trên thiết bị thật.

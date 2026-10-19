@@ -68,3 +68,7 @@ Các phần “chưa có trong alpha” phía trên là mốc lịch sử 0.1.0;
 [Run 39204825292](https://github.com/chimsedibui/vocabapp/actions/runs/39204825292) thành công: 23 test Flutter trên mỗi nền tảng, test tính version, build/ký APK, build Windows, đóng installer/ZIP và publish [v0.2.0](https://github.com/chimsedibui/vocabapp/releases/tag/v0.2.0). Đã tải lại cả ba gói và kiểm SHA-256/size với manifest. APK có versionName 0.2.0, versionCode 2 và certificate trùng APK alpha 0.1.0.
 
 Chưa UAT thao tác file picker trên điện thoại thật, chưa tự tải/cài update trong app; người dùng tải/cài gói từ trang Releases. Các artifact CI cũng đã được chép vào Downloads của Windows để cài thử.
+
+### Kết quả tự động tăng phiên bản v0.2.1
+
+[Run 39205602755](https://github.com/chimsedibui/vocabapp/actions/runs/39205602755) thành công và tự tăng version từ 0.2.0+2 lên 0.2.1+3, commit pubspec/tag rồi publish đủ 7 assets. Đã kiểm checksum/size ba gói tải xuống, metadata Windows/APK và kiểm tra release thực tế qua service của app. Bản mới nhất: [v0.2.1](https://github.com/chimsedibui/vocabapp/releases/tag/v0.2.1). Installer, ZIP và APK đã có trong Downloads của Windows.
