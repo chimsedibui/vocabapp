@@ -57,8 +57,14 @@ Artifact và dữ liệu runtime được ignore trong Git. Script `scripts/buil
 
 [Đặc tả flashcard](11-flashcards.md) làm rõ nền đã có trong alpha và các mở rộng đề xuất. Alpha hiện vẫn chỉ có Anh → Việt, ôn theo lịch. Luyện tự do, chiều Việt → Anh, gợi ý phân biệt nghĩa và lưu thứ tự phiên chính xác chưa được triển khai. Bổ sung tài liệu này không thay phiên bản APK hoặc kết quả kiểm thử code đã nêu ở trên.
 
-## Bản 0.2 — đang phát hành qua GitHub Actions
+## Bản 0.2 — đã phát hành qua GitHub Actions
 
 Đã bổ sung backup/restore có preview, checksum, rollback và recovery snapshot; kiểm tra stable release/mở trang tải từ Cài đặt; version hiển thị lấy từ package metadata. Local đã qua 23 test Flutter và test Python cho tính version. CI mới build/test cả Android và Windows, ký APK bằng key beta ổn định, tạo ZIP và installer Windows, tăng version/tag và upload release. Trạng thái run thực tế ở [GitHub Actions](https://github.com/chimsedibui/vocabapp/actions); xem [hướng dẫn release/backup](12-releases-and-backups.md).
 
 Các phần “chưa có trong alpha” phía trên là mốc lịch sử 0.1.0; backup và kiểm tra release đã có ở 0.2. Tự tải/cài update trong app, sync, API/passage và import vẫn chưa triển khai.
+
+### Kết quả CI v0.2.0
+
+[Run 39204825292](https://github.com/chimsedibui/vocabapp/actions/runs/39204825292) thành công: 23 test Flutter trên mỗi nền tảng, test tính version, build/ký APK, build Windows, đóng installer/ZIP và publish [v0.2.0](https://github.com/chimsedibui/vocabapp/releases/tag/v0.2.0). Đã tải lại cả ba gói và kiểm SHA-256/size với manifest. APK có versionName 0.2.0, versionCode 2 và certificate trùng APK alpha 0.1.0.
+
+Chưa UAT thao tác file picker trên điện thoại thật, chưa tự tải/cài update trong app; người dùng tải/cài gói từ trang Releases. Các artifact CI cũng đã được chép vào Downloads của Windows để cài thử.

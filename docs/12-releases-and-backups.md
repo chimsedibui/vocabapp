@@ -41,3 +41,7 @@ Cấu hình API và secure storage, enrichment/fallback, passage B1+, nhập CSV
 
 - [GitHub: bỏ qua workflow theo commit](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/skip-workflow-runs)
 - [GitHub: sự kiện phát sinh từ GITHUB_TOKEN](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow)
+
+## Lần phát hành đầu đã xác nhận
+
+[CI v0.2.0](https://github.com/chimsedibui/vocabapp/actions/runs/39204825292) đã hoàn thành đủ version → Android/Windows → publish. [Release công khai](https://github.com/chimsedibui/vocabapp/releases/tag/v0.2.0) có 7 assets: APK, ZIP, installer, 3 checksum và release.json. Cả ba gói đã được tải lại và kiểm manifest; chữ ký APK giữ nguyên từ alpha 0.1.0. Bộ tính version sau khi fetch tag hiện trả 0.2.1+3 cho push app tiếp theo.
