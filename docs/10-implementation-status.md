@@ -77,4 +77,10 @@ Chưa UAT thao tác file picker trên điện thoại thật, chưa tự tải/c
 
 Đã code cấu hình OpenAI/Azure API v1 trong secure storage, fallback bật chủ động, trích JSON tối giản, kiểm nguồn/CEFR/budget, cache 30 ngày và passage history. UI cho sửa nghĩa/mức, chọn nghĩa có sẵn hoặc tạo nghĩa khác, duyệt một lần vào nhóm; không reset lịch ôn. DB/backup version 2 giữ passage/provenance và đọc backup1. Xem [hướng dẫn thực tế và giới hạn](13-api-and-passage.md).
 
-Local qua static analysis và 41 test Flutter, gồm test mobile từ nhập passage tới lưu nghĩa đã chỉnh. Chưa gọi provider với key thật, chưa UAT điện thoại thật. Đang xác minh native builds bằng CI; chưa coi việc mock API thành bằng chứng deployment cá nhân hoạt động.
+Local qua static analysis và 41 test Flutter, gồm test mobile từ nhập passage tới lưu nghĩa đã chỉnh. Chưa gọi provider với key thật, chưa UAT điện thoại thật. Native builds đã được xác minh bằng CI bên dưới; mock API không phải bằng chứng deployment cá nhân hoạt động.
+
+### Kết quả phát hành v0.3.0
+
+[Run 39211168907](https://github.com/chimsedibui/vocabapp/actions/runs/39211168907) thành công đủ version → Android/Windows → publish. [v0.3.0](https://github.com/chimsedibui/vocabapp/releases/tag/v0.3.0) công khai có đủ 7 assets. CI qua 41 test Flutter trên mỗi nền tảng và 4 test Python. Đã tải lại và kiểm SHA-256/size của APK, ZIP và installer với manifest. Windows ZIP có plugin DLL secure storage và runtime; ProductVersion/FileVersion 0.3.0+4. APK versionName 0.3.0, versionCode 4, chữ ký khớp 0.2.1. Service kiểm update của app đọc được stable 0.3.0 với 7 asset. Các gói và checksum đã chép vào Downloads trên Windows.
+
+Chưa gọi API với key thật, chưa UAT secure-storage/file-picker trên điện thoại vật lý; không khẳng định phân loại CEFR đã được benchmark.
