@@ -77,7 +77,7 @@ class _DataSettingsState extends State<DataSettings> {
       bytes: data,
     );
     if (path == null) return null;
-    return 'Đã sao lưu từ, nhóm và toàn bộ tiến độ học.';
+    return 'Đã sao lưu từ, nhóm, passage và toàn bộ tiến độ học.';
   }
 
   Future<String?> _restore() async {
@@ -105,7 +105,7 @@ class _DataSettingsState extends State<DataSettings> {
       builder: (context) => AlertDialog(
         title: const Text('Thay thế toàn bộ thư viện?'),
         content: Text(
-          'Bản sao có ${summary.entries} từ, ${summary.senses} nghĩa và ${summary.reviews} lượt ôn.\n\nThư viện hiện tại sẽ được thay thế. App giữ thêm một bản phục hồi trên thiết bị trước khi khôi phục.',
+          'Bản sao có ${summary.entries} từ, ${summary.senses} nghĩa và ${summary.reviews} lượt ôn, ${summary.passages} passage (có văn bản nguồn).\n\nThư viện hiện tại sẽ được thay thế. App giữ thêm một bản phục hồi trên thiết bị trước khi khôi phục.',
         ),
         actions: [
           TextButton(
@@ -165,7 +165,7 @@ class _DataSettingsState extends State<DataSettings> {
               ),
               const SizedBox(height: 12),
               const Text(
-                'File sao lưu giữ toàn bộ từ và tiến độ. Khôi phục thay thế thư viện hiện tại; không tự gộp hai thiết bị.',
+                'File sao lưu giữ từ, tiến độ và passage có văn bản nguồn. Không chứa API key. Khôi phục thay thế thư viện hiện tại; không tự gộp hai thiết bị.',
               ),
               const SizedBox(height: 16),
               Wrap(

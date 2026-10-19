@@ -35,7 +35,7 @@ Triển khai dùng snapshot logic và transaction trong DB đang mở (có kiể
 
 ## Còn phải triển khai
 
-Cấu hình API và secure storage, enrichment/fallback, passage B1+, nhập CSV/JSON/XLSX, Parquet converter, sync, flashcard mở rộng. Backup và kiểm tra stable release hiện là nền cho các mốc đó; không coi toàn bộ MVP đã hoàn tất.
+Enrichment từng từ/Google dịch dự phòng, nhập CSV/JSON/XLSX, Parquet converter, sync, flashcard mở rộng. API OpenAI/Azure và passage CEFR đã được triển khai ở 0.3; xem tài liệu 13. Backup và kiểm tra stable release hiện là nền cho các mốc đó; không coi toàn bộ MVP đã hoàn tất.
 
 ## Tham chiếu vận hành
 
@@ -49,3 +49,7 @@ Cấu hình API và secure storage, enrichment/fallback, passage B1+, nhập CSV
 ## Xác nhận tự tăng version v0.2.1
 
 [Run 39205602755](https://github.com/chimsedibui/vocabapp/actions/runs/39205602755) đã phát hành [v0.2.1](https://github.com/chimsedibui/vocabapp/releases/tag/v0.2.1) từ push sửa workflow. CI tự chọn 0.2.1+3, tạo commit `d8a7395` cập nhật pubspec và tag, không sinh run lặp. Cả hai nền tảng qua test/build. Đã tải lại và đối chiếu SHA-256/size của đủ ba gói với manifest; Windows binary có ProductVersion/FileVersion 0.2.1+3, APK có versionName 0.2.1/versionCode 3 và giữ certificate beta. File cài đặt đã chép vào Downloads trên Windows. Chưa thay thế UAT trên thiết bị thật.
+
+## Backup ở bản 0.3
+
+DB/backup version 2 thêm `passage_jobs` và `sense_origins` (9 bảng); vẫn đọc backup version 1 bằng cách bổ sung hai bảng mới rỗng. Migration từ DB 1 sang 2 giữ thư viện/lịch ôn. Backup có nguyên passage, kết quả JSON, usage và provenance; không có cấu hình/API key trong secure storage. Bản 0.2 từ chối DB/backup 2, nên không chạy lại app cũ trên DB đã nâng cấp. Preview restore hiển thị số passage. Giới hạn file vẫn 20 MiB.

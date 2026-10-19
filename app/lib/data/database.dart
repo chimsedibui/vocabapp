@@ -23,13 +23,13 @@ Future<Database> openVocabularyDatabase(
   path,
   options: OpenDatabaseOptions(
     singleInstance: singleInstance,
-    version: 1,
+    version: 2,
     onConfigure: (db) async {
       await db.execute('PRAGMA foreign_keys = ON');
       await db.execute('PRAGMA busy_timeout = 5000');
     },
     onCreate: (db, version) async {
-      for (final statement in _schema) {
+      for (final statement in [..._schema, ...passageSchemaStatements]) {
         await db.execute(statement);
       }
       await db.insert('settings', {
@@ -44,6 +44,13 @@ Future<Database> openVocabularyDatabase(
         'name': 'Từ vựng hằng ngày',
         'archived': 0,
       });
+    },
+    onUpgrade: (db, oldVersion, newVersion) async {
+      if (oldVersion < 2) {
+        for (final statement in passageSchemaStatements) {
+          await db.execute(statement);
+        }
+      }
     },
     // Future migrations must be explicit. Never delete a newer database.
     onDowngrade: (db, oldVersion, newVersion) async =>
@@ -96,4 +103,24 @@ const _schema = [
   'CREATE INDEX cards_due ON cards(suspended, state, due_at)',
   'CREATE INDEX reviews_day ON review_events(study_day, was_new)',
   'CREATE INDEX deck_entries_entry ON deck_entries(entry_id)',
+];
+
+const passageSchemaStatements = [
+  """CREATE TABLE passage_jobs (
+    id TEXT PRIMARY KEY, source_text TEXT NOT NULL,
+    min_level TEXT NOT NULL CHECK(min_level IN ('A1','A2','B1','B2','C1','C2')),
+    max_items INTEGER NOT NULL CHECK(max_items BETWEEN 1 AND 100),
+    cache_key TEXT NOT NULL, created_at INTEGER NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('pending','complete','error','cancelled')),
+    result_json TEXT, provider TEXT, model TEXT,
+    removed INTEGER NOT NULL DEFAULT 0, at_limit INTEGER NOT NULL DEFAULT 0,
+    attempts_json TEXT NOT NULL DEFAULT '[]', error_text TEXT)""",
+  """CREATE TABLE sense_origins (
+    id TEXT PRIMARY KEY, sense_id TEXT NOT NULL REFERENCES senses(id),
+    job_id TEXT REFERENCES passage_jobs(id) ON DELETE SET NULL,
+    estimated_level TEXT NOT NULL CHECK(estimated_level IN ('A1','A2','B1','B2','C1','C2')),
+    level_source TEXT NOT NULL CHECK(level_source IN ('llm','user')),
+    provider TEXT NOT NULL, model TEXT NOT NULL, created_at INTEGER NOT NULL,
+    UNIQUE(sense_id, job_id))""",
+  'CREATE INDEX passage_cache ON passage_jobs(cache_key, created_at)',
 ];

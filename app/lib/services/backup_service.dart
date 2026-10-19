@@ -7,8 +7,13 @@ import 'package:sqflite_common/sqlite_api.dart';
 import '../domain/models.dart';
 
 class BackupSummary {
-  const BackupSummary(this.entries, this.senses, this.reviews);
-  final int entries, senses, reviews;
+  const BackupSummary(
+    this.entries,
+    this.senses,
+    this.reviews, [
+    this.passages = 0,
+  ]);
+  final int entries, senses, reviews, passages;
 }
 
 /// Versioned logical snapshot. All reads/writes share SQLite transactions.
@@ -24,6 +29,8 @@ class BackupService {
     'deck_entries',
     'cards',
     'review_events',
+    'passage_jobs',
+    'sense_origins',
   ];
 
   Future<Uint8List> export() => db.transaction(_capture);
@@ -41,8 +48,8 @@ class BackupService {
       utf8.encode(
         jsonEncode({
           'format': 'vocabapp-backup',
-          'version': 1,
-          'db_version': 1,
+          'version': 2,
+          'db_version': 2,
           'created_at': DateTime.now().toUtc().toIso8601String(),
           'sha256': sha256.convert(utf8.encode(payload)).toString(),
           'data': rows,
@@ -62,16 +69,22 @@ class BackupService {
       if (bytes.length > maxBytes) throw const FormatException();
       final root = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
       if (root['format'] != 'vocabapp-backup' ||
-          root['version'] != 1 ||
-          root['db_version'] != 1) {
+          !((root['version'] == 1 && root['db_version'] == 1) ||
+              (root['version'] == 2 && root['db_version'] == 2))) {
         throw const FormatException();
       }
       final data = root['data'] as Map<String, dynamic>;
-      if (data.length != tables.length ||
-          !tables.every(data.containsKey) ||
+      if (data.length != (root['version'] == 1 ? 7 : tables.length) ||
+          !(root['version'] == 1 ? tables.take(7) : tables).every(
+            data.containsKey,
+          ) ||
           sha256.convert(utf8.encode(jsonEncode(data))).toString() !=
               root['sha256']) {
         throw const FormatException();
+      }
+      if (root['version'] == 1) {
+        data['passage_jobs'] = <dynamic>[];
+        data['sense_origins'] = <dynamic>[];
       }
       var total = 0;
       for (final table in tables) {
@@ -97,6 +110,7 @@ class BackupService {
       (data['entries'] as List).length,
       (data['senses'] as List).length,
       (data['review_events'] as List).length,
+      (data['passage_jobs'] as List).length,
     );
   }
 
@@ -122,7 +136,11 @@ class BackupService {
           if ((value == null && required) ||
               (value != null &&
                   col['type'] == 'TEXT' &&
-                  (value is! String || value.length > 4096)) ||
+                  (value is! String ||
+                      value.length >
+                          (table == 'passage_jobs'
+                              ? (col['name'] == 'source_text' ? 12000 : 100000)
+                              : 4096))) ||
               (value != null && col['type'] == 'INTEGER' && value is! int)) {
             throw const UserFacingException(
               'Bản sao lưu có trường dữ liệu không hợp lệ.',

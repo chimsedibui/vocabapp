@@ -1,6 +1,6 @@
 # 08 — Trích từ vựng từ passage theo trình độ
 
-Bổ sung yêu cầu ngày 19/10/2026, kickoff v0.2. FR15 / UC10, P0 trong M2. Đây là đặc tả, chưa phải chức năng đã chạy.
+Bổ sung yêu cầu ngày 19/10/2026, kickoff v0.2. FR15 / UC10, P0 trong M2. Đây là đặc tả mục tiêu; phần đã triển khai ở bản 0.3 và giới hạn hiện tại được ghi trong [tài liệu 13](13-api-and-passage.md).
 
 ## 1. Luồng sử dụng
 

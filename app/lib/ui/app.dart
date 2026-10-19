@@ -8,6 +8,8 @@ import '../domain/models.dart';
 import 'editors.dart';
 import 'data_settings.dart';
 import 'review_page.dart';
+import 'ai_settings.dart';
+import 'passage_page.dart';
 
 class VocabApp extends StatelessWidget {
   const VocabApp({super.key, required this.repository});
@@ -171,6 +173,16 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       _refresh();
       _message('Đã thêm $count từ nháp. Các từ trùng được giữ nguyên.');
     }
+  }
+
+  Future<void> _passage() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute<bool>(
+        builder: (_) => PassagePage(library: repo, initialDeck: _deck),
+      ),
+    );
+    _refresh();
   }
 
   Future<void> _study() async {
@@ -464,6 +476,16 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
 
   Widget _library(_Overview data) => CustomScrollView(
     slivers: [
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+          child: OutlinedButton.icon(
+            onPressed: _passage,
+            icon: const Icon(Icons.auto_awesome_outlined),
+            label: const Text('Thêm từ từ passage (AI)'),
+          ),
+        ),
+      ),
       SliverToBoxAdapter(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -778,6 +800,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           ),
         ),
       ),
+      const SizedBox(height: 16),
+      const AiSettings(),
       const SizedBox(height: 16),
       DataSettings(
         repository: repo,

@@ -1,6 +1,6 @@
 # VocabApp
 
-Bộ tài liệu BA v0.3 • 19/10/2026 • Source Flutter cho Windows/Android; bản 0.2 bổ sung backup/restore, kiểm tra cập nhật và CI phát hành. API/passage và import còn trong roadmap.
+Bộ tài liệu BA v0.3 • 19/10/2026 • Source Flutter cho Windows/Android; bản 0.3 bổ sung API OpenAI/Azure, trích từ từ passage theo CEFR và duyệt kết quả. Import file và dịch Google còn trong roadmap.
 
 App cá nhân để gom từ vựng vào một thư viện, chuẩn bị nghĩa bằng API hoặc nhập file, rồi học và ôn trong một luồng thống nhất trên Windows và Android. Ưu tiên học từ–nghĩa, không bắt buộc chép tay, gõ đáp án hoặc học qua câu ví dụ.
 
@@ -25,6 +25,7 @@ Source nằm trong [app/](app/README.md): thư viện SQLite, từ/nghĩa/nhóm,
 | [09 — Môi trường phát triển](docs/09-development-environment.md) | Công cụ Windows/WSL đã cài và lệnh build hai nền tảng |
 | [10 — Tiến độ triển khai](docs/10-implementation-status.md) | Chức năng đã có, kiểm thử và artifact alpha |
 | [11 — Flashcard](docs/11-flashcards.md) | Hai mặt thẻ, chế độ học, lịch ôn và mở rộng chiều học |
+| [13 — API và passage thực tế](docs/13-api-and-passage.md) | Cấu hình key, trích CEFR, cache, duyệt và giới hạn |
 | [12 — GitHub, release và backup](docs/12-releases-and-backups.md) | CI tăng version, bộ cài, khóa beta và backup/restore |
 
 ## Định hướng đề xuất

@@ -1,4 +1,4 @@
-# VocabApp — offline beta 0.2
+# VocabApp — beta 0.3
 
 Flutter application for Android and Windows. The first implementation covers the local learning loop; the product specification is in `../docs/`.
 
@@ -49,13 +49,23 @@ This runs analysis and tests before building an **arm64 debug APK** in `../artif
 
 ## Data
 
-`vocabulary.db` is saved under the OS application-support directory. Database schema version: 1. Application ID: `dev.vocabapp.vocabapp`. Do not uninstall or clear application data if you want to retain this alpha library. Use Settings → Backup to export a complete library snapshot. Restore replaces the library with confirmation and keeps a recovery snapshot. See `../docs/12-releases-and-backups.md`.
+`vocabulary.db` is saved under the OS application-support directory. Database schema version: 2; version 1 migrates without deleting vocabulary or reviews. Application ID: `dev.vocabapp.vocabapp`. Do not uninstall or clear application data if you want to retain this alpha library. Use Settings → Backup to export a complete library snapshot. Restore replaces the library with confirmation and keeps a recovery snapshot. See `../docs/12-releases-and-backups.md`.
 
 Tests cover real SQLite reopen, transaction rollback, duplicate/conflict handling, multiple senses/groups, optimistic concurrency, daily limits, suspension, review interactions, and mobile layout with 150% text scaling.
 
+## API and passage extraction
+
+Settings → API: configure OpenAI key/model, or Azure key/resource endpoint/deployment using the v1 API. Keys/configuration use flutter_secure_storage on the device and are excluded from database backups. Optional fallback must be explicitly enabled. No automatic credential reuse from another project.
+
+Library → Add words from passage: paste English, choose minimum CEFR (default B1) and max items (default 30). Review and edit meanings/levels, choose an existing sense or add a new sense, then approve into a group. No existing meaning or review schedule is overwritten. Compact JSON uses term/level/meaning only. Source grounding and CEFR threshold are checked locally; estimated CEFR still needs human review.
+
+Jobs/results/usage persist locally. Identical successful requests use a 30-day cache; regenerate is explicit. Delete a passage to remove its text/results/usage while preserving accepted words. Backups now use format/DB version 2 with passage/provenance and can restore version 1 snapshots. A 0.2 app cannot open a migrated version 2 database.
+
+See `../docs/13-api-and-passage.md` for budgets, limits, provider compatibility and verification.
+
 ## Following milestones
 
-API configuration and secure key storage, Azure/OpenAI enrichment, CEFR passage extraction, CSV/XLSX/JSON import and Parquet conversion remain on the product backlog. Settings can check GitHub Releases and open the download page; automated in-app download/install is still pending. This alpha does not yet implement those workflows.
+Single-word Azure/OpenAI enrichment, Google Translation fallback, CSV/XLSX/JSON import and Parquet conversion remain on the product backlog. Settings can check GitHub Releases and open the download page; automated in-app download/install is still pending. This alpha does not yet implement those workflows.
 
 ## Windows alpha bundle
 

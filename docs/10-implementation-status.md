@@ -72,3 +72,9 @@ Chưa UAT thao tác file picker trên điện thoại thật, chưa tự tải/c
 ### Kết quả tự động tăng phiên bản v0.2.1
 
 [Run 39205602755](https://github.com/chimsedibui/vocabapp/actions/runs/39205602755) thành công và tự tăng version từ 0.2.0+2 lên 0.2.1+3, commit pubspec/tag rồi publish đủ 7 assets. Đã kiểm checksum/size ba gói tải xuống, metadata Windows/APK và kiểm tra release thực tế qua service của app. Bản mới nhất: [v0.2.1](https://github.com/chimsedibui/vocabapp/releases/tag/v0.2.1). Installer, ZIP và APK đã có trong Downloads của Windows.
+
+## Bản 0.3 — API và passage CEFR
+
+Đã code cấu hình OpenAI/Azure API v1 trong secure storage, fallback bật chủ động, trích JSON tối giản, kiểm nguồn/CEFR/budget, cache 30 ngày và passage history. UI cho sửa nghĩa/mức, chọn nghĩa có sẵn hoặc tạo nghĩa khác, duyệt một lần vào nhóm; không reset lịch ôn. DB/backup version 2 giữ passage/provenance và đọc backup1. Xem [hướng dẫn thực tế và giới hạn](13-api-and-passage.md).
+
+Local qua static analysis và 40 test Flutter, gồm test mobile từ nhập passage tới lưu nghĩa đã chỉnh. Chưa gọi provider với key thật, chưa UAT điện thoại thật. Đang xác minh native builds bằng CI; chưa coi việc mock API thành bằng chứng deployment cá nhân hoạt động.
