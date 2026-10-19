@@ -5,6 +5,7 @@ on:
     paths:
       - 'app/**'
       - 'scripts/ci/**'
+      - 'installer/**'
       - '.github/workflows/release.yml'
   workflow_dispatch:
     inputs:
