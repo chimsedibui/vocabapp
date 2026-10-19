@@ -507,6 +507,7 @@ class _PassagePageState extends State<PassagePage> {
                   minLines: 5,
                   maxLines: 12,
                   maxLength: 12000,
+                  maxLengthEnforcement: MaxLengthEnforcement.none,
                   decoration: const InputDecoration(
                     labelText: 'Passage tiếng Anh',
                   ),

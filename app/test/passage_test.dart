@@ -460,6 +460,43 @@ void main() {
       expect(await repo.history(), isEmpty);
       expect((await library.vocabulary()).length, 1);
     });
+    testWidgets('overlong paste is preserved and blocked before an API call', (
+      tester,
+    ) async {
+      await const AiConfigurationStore().save(const AiPreferences(config));
+      var calls = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PassagePage(
+            library: library,
+            serviceFactory: () => PassageService(
+              clientFactory: () => MockClient((_) async {
+                calls++;
+                return response();
+              }),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final field = find.widgetWithText(TextField, 'Passage tiếng Anh');
+      await tester.enterText(field, 'a' * 12001);
+      expect(tester.widget<TextField>(field).controller!.text.length, 12001);
+      FocusManager.instance.primaryFocus?.unfocus();
+      tester.testTextInput.hide();
+      await tester.pumpAndSettle();
+      final scroll = tester
+          .state<ScrollableState>(find.byType(Scrollable).first)
+          .position;
+      scroll.jumpTo(scroll.maxScrollExtent);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Trích từ (ưu tiên cache)'));
+      await tester.pumpAndSettle();
+      expect(calls, 0);
+      expect(await repo.history(), isEmpty);
+      expect(find.textContaining('Cần passage 1–12.000 ký tự'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
     testWidgets(
       'mobile passage flow reviews, edits and saves without extra API calls',
       (tester) async {

@@ -77,4 +77,4 @@ Chưa UAT thao tác file picker trên điện thoại thật, chưa tự tải/c
 
 Đã code cấu hình OpenAI/Azure API v1 trong secure storage, fallback bật chủ động, trích JSON tối giản, kiểm nguồn/CEFR/budget, cache 30 ngày và passage history. UI cho sửa nghĩa/mức, chọn nghĩa có sẵn hoặc tạo nghĩa khác, duyệt một lần vào nhóm; không reset lịch ôn. DB/backup version 2 giữ passage/provenance và đọc backup1. Xem [hướng dẫn thực tế và giới hạn](13-api-and-passage.md).
 
-Local qua static analysis và 40 test Flutter, gồm test mobile từ nhập passage tới lưu nghĩa đã chỉnh. Chưa gọi provider với key thật, chưa UAT điện thoại thật. Đang xác minh native builds bằng CI; chưa coi việc mock API thành bằng chứng deployment cá nhân hoạt động.
+Local qua static analysis và 41 test Flutter, gồm test mobile từ nhập passage tới lưu nghĩa đã chỉnh. Chưa gọi provider với key thật, chưa UAT điện thoại thật. Đang xác minh native builds bằng CI; chưa coi việc mock API thành bằng chứng deployment cá nhân hoạt động.

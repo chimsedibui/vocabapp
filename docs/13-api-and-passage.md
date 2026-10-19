@@ -31,7 +31,7 @@ Backup version 2 giữ đủ 9 bảng và nguyên văn passage; preview có số
 
 ## Xác minh và phần chưa có
 
-Local: static analysis không lỗi; 40 test Flutter gồm mock request/fallback/refusal/cancel/cap, Unicode grounding, approval atomic/idempotent, conflicting senses, backup1/2, nâng DB1 giữ lịch ôn và UI mobile sửa nghĩa → lưu. Không dùng key thật, chưa xác nhận quota/model/deployment hoặc chất lượng CEFR trên dữ liệu người dùng. Build native và kết quả release được ghi ở tài liệu 10 sau CI.
+Local: static analysis không lỗi; 41 test Flutter gồm mock request/fallback/refusal/cancel/cap, Unicode grounding, approval atomic/idempotent, conflicting senses, backup1/2, nâng DB1 giữ lịch ôn và UI mobile sửa nghĩa → lưu. Không dùng key thật, chưa xác nhận quota/model/deployment hoặc chất lượng CEFR trên dữ liệu người dùng. Build native và kết quả release được ghi ở tài liệu 10 sau CI.
 
 Chưa có Google dịch dự phòng cho nhập từ đơn; Google không thể thay bước trích/phân CEFR. Chưa có importer CSV/JSON/XLSX/Parquet, tự cài update, sync, cache cleanup tự động hay UI xem toàn bộ hơn 30 job. Dữ liệu passage không bị tự xóa khi quá TTL cache; có thể xóa job trong lịch sử đang hiển thị.
 
