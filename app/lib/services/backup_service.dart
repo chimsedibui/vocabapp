@@ -31,6 +31,7 @@ class BackupService {
     'review_events',
     'passage_jobs',
     'sense_origins',
+    'import_batches',
   ];
 
   Future<Uint8List> export() => db.transaction(_capture);
@@ -48,8 +49,8 @@ class BackupService {
       utf8.encode(
         jsonEncode({
           'format': 'vocabapp-backup',
-          'version': 2,
-          'db_version': 2,
+          'version': 3,
+          'db_version': 3,
           'created_at': DateTime.now().toUtc().toIso8601String(),
           'sha256': sha256.convert(utf8.encode(payload)).toString(),
           'data': rows,
@@ -70,14 +71,20 @@ class BackupService {
       final root = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
       if (root['format'] != 'vocabapp-backup' ||
           !((root['version'] == 1 && root['db_version'] == 1) ||
-              (root['version'] == 2 && root['db_version'] == 2))) {
+              (root['version'] == 2 && root['db_version'] == 2) ||
+              (root['version'] == 3 && root['db_version'] == 3))) {
         throw const FormatException();
       }
       final data = root['data'] as Map<String, dynamic>;
-      if (data.length != (root['version'] == 1 ? 7 : tables.length) ||
-          !(root['version'] == 1 ? tables.take(7) : tables).every(
-            data.containsKey,
-          ) ||
+      final oldTables = tables.take(
+        root['version'] == 1
+            ? 7
+            : root['version'] == 2
+            ? 9
+            : 10,
+      );
+      if (data.length != oldTables.length ||
+          !oldTables.every(data.containsKey) ||
           sha256.convert(utf8.encode(jsonEncode(data))).toString() !=
               root['sha256']) {
         throw const FormatException();
@@ -85,6 +92,15 @@ class BackupService {
       if (root['version'] == 1) {
         data['passage_jobs'] = <dynamic>[];
         data['sense_origins'] = <dynamic>[];
+      }
+      if ((root['version'] as int) < 3) {
+        data['import_batches'] = <dynamic>[];
+        for (final row in data['senses'] as List) {
+          for (final field in ['part_of_speech', 'pronunciation', 'note']) {
+            if ((row as Map).containsKey(field)) throw const FormatException();
+            row[field] = null;
+          }
+        }
       }
       var total = 0;
       for (final table in tables) {

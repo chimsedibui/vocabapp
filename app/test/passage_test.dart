@@ -452,6 +452,12 @@ void main() {
       root['db_version'] = 1;
       root['data'].remove('passage_jobs');
       root['data'].remove('sense_origins');
+      root['data'].remove('import_batches');
+      for (final row in root['data']['senses']) {
+        for (final field in ['part_of_speech', 'pronunciation', 'note']) {
+          row.remove(field);
+        }
+      }
       root['sha256'] = sha256
           .convert(utf8.encode(jsonEncode(root['data'])))
           .toString();
@@ -588,6 +594,10 @@ void main() {
       'persisted',
     );
     final cards = await first.query('cards');
+    await first.execute('DROP TABLE import_batches');
+    for (final field in ['part_of_speech', 'pronunciation', 'note']) {
+      await first.execute('ALTER TABLE senses DROP COLUMN $field');
+    }
     await first.execute('DROP TABLE sense_origins');
     await first.execute('DROP TABLE passage_jobs');
     await first.setVersion(1);
@@ -597,7 +607,7 @@ void main() {
       path,
     );
     try {
-      expect(await upgraded.getVersion(), 2);
+      expect(await upgraded.getVersion(), 3);
       expect(await upgraded.query('cards'), cards);
       expect((await upgraded.query('review_events')).single['id'], 'persisted');
       expect(await upgraded.query('passage_jobs'), isEmpty);

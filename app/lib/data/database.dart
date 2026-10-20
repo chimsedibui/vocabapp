@@ -23,13 +23,17 @@ Future<Database> openVocabularyDatabase(
   path,
   options: OpenDatabaseOptions(
     singleInstance: singleInstance,
-    version: 2,
+    version: 3,
     onConfigure: (db) async {
       await db.execute('PRAGMA foreign_keys = ON');
       await db.execute('PRAGMA busy_timeout = 5000');
     },
     onCreate: (db, version) async {
-      for (final statement in [..._schema, ...passageSchemaStatements]) {
+      for (final statement in [
+        ..._schema,
+        ...passageSchemaStatements,
+        ...importSchemaStatements,
+      ]) {
         await db.execute(statement);
       }
       await db.insert('settings', {
@@ -48,6 +52,11 @@ Future<Database> openVocabularyDatabase(
     onUpgrade: (db, oldVersion, newVersion) async {
       if (oldVersion < 2) {
         for (final statement in passageSchemaStatements) {
+          await db.execute(statement);
+        }
+      }
+      if (oldVersion < 3) {
+        for (final statement in importSchemaStatements) {
           await db.execute(statement);
         }
       }
@@ -123,4 +132,15 @@ const passageSchemaStatements = [
     provider TEXT NOT NULL, model TEXT NOT NULL, created_at INTEGER NOT NULL,
     UNIQUE(sense_id, job_id))""",
   'CREATE INDEX passage_cache ON passage_jobs(cache_key, created_at)',
+];
+
+const importSchemaStatements = [
+  'ALTER TABLE senses ADD COLUMN part_of_speech TEXT',
+  'ALTER TABLE senses ADD COLUMN pronunciation TEXT',
+  'ALTER TABLE senses ADD COLUMN note TEXT',
+  """CREATE TABLE import_batches (
+    id TEXT PRIMARY KEY, source_name TEXT NOT NULL, source_hash TEXT NOT NULL,
+    created_at INTEGER NOT NULL, selected_rows INTEGER NOT NULL,
+    new_senses INTEGER NOT NULL, memberships INTEGER NOT NULL,
+    approved INTEGER NOT NULL, skipped INTEGER NOT NULL)""",
 ];

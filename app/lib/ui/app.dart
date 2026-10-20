@@ -10,6 +10,7 @@ import 'data_settings.dart';
 import 'review_page.dart';
 import 'ai_settings.dart';
 import 'passage_page.dart';
+import 'import_page.dart';
 
 class VocabApp extends StatelessWidget {
   const VocabApp({super.key, required this.repository});
@@ -173,6 +174,14 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       _refresh();
       _message('Đã thêm $count từ nháp. Các từ trùng được giữ nguyên.');
     }
+  }
+
+  Future<void> _import() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute<bool>(builder: (_) => ImportPage(library: repo)),
+    );
+    _refresh();
   }
 
   Future<void> _passage() async {
@@ -476,6 +485,16 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
 
   Widget _library(_Overview data) => CustomScrollView(
     slivers: [
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+          child: OutlinedButton.icon(
+            onPressed: _import,
+            icon: const Icon(Icons.table_view_outlined),
+            label: const Text('Nhập file JSON / CSV và kiểm tra'),
+          ),
+        ),
+      ),
       SliverToBoxAdapter(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
