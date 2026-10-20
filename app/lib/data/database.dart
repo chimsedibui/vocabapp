@@ -26,7 +26,8 @@ Future<Database> openVocabularyDatabase(
     version: 3,
     onConfigure: (db) async {
       await db.execute('PRAGMA foreign_keys = ON');
-      await db.execute('PRAGMA busy_timeout = 5000');
+      // This pragma returns a row; Android's execSQL rejects that, so query it.
+      await db.rawQuery('PRAGMA busy_timeout = 5000');
     },
     onCreate: (db, version) async {
       for (final statement in [
