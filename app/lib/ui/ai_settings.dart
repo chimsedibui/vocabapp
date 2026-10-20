@@ -7,6 +7,7 @@ class AiSettings extends StatelessWidget {
   const AiSettings({super.key});
   @override
   Widget build(BuildContext context) => Card(
+    margin: EdgeInsets.zero,
     child: ListTile(
       leading: const Icon(Icons.key_outlined),
       title: const Text('API trích từ vựng'),

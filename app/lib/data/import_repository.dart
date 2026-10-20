@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 
 import '../domain/import_data.dart';
 import '../domain/models.dart';
+import 'ids.dart';
 import 'library_repository.dart';
 
 class ImportSnapshot {
@@ -206,7 +207,7 @@ class ImportRepository {
       var deck = current.decks[row.text('deck_key')];
       if (deck == null) {
         deck = {
-          'id': _uuid.v4(),
+          'id': Ids.deck(row.text('deck_key')),
           'deck_key': row.text('deck_key'),
           'name': row.text('deck_name'),
           'archived': 0,
@@ -217,7 +218,11 @@ class ImportRepository {
       var entry = current.entries[row.entryKey];
       if (entry == null) {
         entry = {
-          'id': _uuid.v4(),
+          'id': Ids.entry(
+            row.text('term'),
+            row.text('source_language'),
+            row.text('target_language'),
+          ),
           'term': row.text('term'),
           'normalized_term': row.text('term'),
           'source_language': row.text('source_language'),
@@ -232,7 +237,7 @@ class ImportRepository {
       var changed = false;
       if (sense == null) {
         sense = {
-          'id': _uuid.v4(),
+          'id': Ids.sense(entry['id'] as String, row.text('sense_key')),
           'entry_id': entry['id'],
           'sense_key': row.text('sense_key'),
           'meaning': row.text('meaning'),
@@ -247,7 +252,10 @@ class ImportRepository {
         senses++;
         changed = true;
         if (shouldApprove) {
-          await tx.insert('cards', {'id': _uuid.v4(), 'sense_id': sense['id']});
+          await tx.insert('cards', {
+            'id': Ids.card(sense['id'] as String),
+            'sense_id': sense['id'],
+          });
           approved++;
         }
       } else if (shouldApprove &&
@@ -259,7 +267,10 @@ class ImportRepository {
           where: 'id=?',
           whereArgs: [sense['id']],
         );
-        await tx.insert('cards', {'id': _uuid.v4(), 'sense_id': sense['id']});
+        await tx.insert('cards', {
+          'id': Ids.card(sense['id'] as String),
+          'sense_id': sense['id'],
+        });
         sense = {...sense, 'status': 'approved'};
         current.senses[row.senseKey] = sense;
         approved++;

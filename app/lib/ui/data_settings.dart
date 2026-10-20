@@ -154,6 +154,7 @@ class _DataSettingsState extends State<DataSettings> {
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       Card(
+        margin: EdgeInsets.zero,
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
@@ -190,6 +191,7 @@ class _DataSettingsState extends State<DataSettings> {
       ),
       const SizedBox(height: 16),
       Card(
+        margin: EdgeInsets.zero,
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(

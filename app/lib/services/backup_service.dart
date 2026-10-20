@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:sqflite_common/sqlite_api.dart';
 
 import '../domain/models.dart';
+import '../data/ids.dart';
 
 class BackupSummary {
   const BackupSummary(
@@ -187,6 +188,8 @@ class BackupService {
             await tx.insert(table, row);
           }
         }
+        // Older backups carry random IDs; sync relies on deterministic ones.
+        await Ids.normalize(tx);
         final invalidCards = await tx.rawQuery("""
           SELECT c.id FROM cards c JOIN senses s ON s.id=c.sense_id
           WHERE s.status!='approved' OR c.interval_days NOT BETWEEN 1 AND 365

@@ -6,6 +6,8 @@ import 'package:sqflite/sqflite.dart' as mobile;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:uuid/uuid.dart';
 
+import 'ids.dart';
+
 Future<Database> openAppDatabase() async {
   final dir = await getApplicationSupportDirectory();
   await dir.create(recursive: true);
@@ -23,7 +25,7 @@ Future<Database> openVocabularyDatabase(
   path,
   options: OpenDatabaseOptions(
     singleInstance: singleInstance,
-    version: 3,
+    version: 4,
     onConfigure: (db) async {
       await db.execute('PRAGMA foreign_keys = ON');
       // This pragma returns a row; Android's execSQL rejects that, so query it.
@@ -34,6 +36,7 @@ Future<Database> openVocabularyDatabase(
         ..._schema,
         ...passageSchemaStatements,
         ...importSchemaStatements,
+        ...syncSchemaStatements,
       ]) {
         await db.execute(statement);
       }
@@ -44,7 +47,7 @@ Future<Database> openVocabularyDatabase(
         'device_id': const Uuid().v4(),
       });
       await db.insert('decks', {
-        'id': const Uuid().v4(),
+        'id': Ids.deck('daily'),
         'deck_key': 'daily',
         'name': 'Từ vựng hằng ngày',
         'archived': 0,
@@ -58,6 +61,14 @@ Future<Database> openVocabularyDatabase(
       }
       if (oldVersion < 3) {
         for (final statement in importSchemaStatements) {
+          await db.execute(statement);
+        }
+      }
+      if (oldVersion < 4) {
+        // Before the triggers exist, so the one-off rewrite is not queued;
+        // first sync seeds every row anyway.
+        await Ids.normalize(db);
+        for (final statement in syncSchemaStatements) {
           await db.execute(statement);
         }
       }
@@ -144,4 +155,42 @@ const importSchemaStatements = [
     created_at INTEGER NOT NULL, selected_rows INTEGER NOT NULL,
     new_senses INTEGER NOT NULL, memberships INTEGER NOT NULL,
     approved INTEGER NOT NULL, skipped INTEGER NOT NULL)""",
+];
+
+/// Tables replicated by sync, parents first. `settings` stays per device.
+const syncTables = {
+  'decks': ['id'],
+  'entries': ['id'],
+  'senses': ['id'],
+  'deck_entries': ['deck_id', 'entry_id'],
+  'cards': ['id'],
+  'review_events': ['id'],
+  'passage_jobs': ['id'],
+  'sense_origins': ['id'],
+  'import_batches': ['id'],
+};
+
+String syncPkSql(String table, String row) =>
+    syncTables[table]!.map((c) => '$row.$c').join(" || '|' || ");
+
+final syncSchemaStatements = [
+  // One row per changed record; the current row is read at push time and a
+  // missing row becomes a tombstone. Triggers delete+insert rather than
+  // INSERT OR REPLACE, which is ignored for writes caused by FK actions.
+  """CREATE TABLE sync_outbox (
+    tbl TEXT NOT NULL, pk TEXT NOT NULL, changed_at INTEGER NOT NULL,
+    PRIMARY KEY(tbl, pk)) WITHOUT ROWID""",
+  'CREATE TABLE sync_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
+  for (final table in syncTables.keys)
+    for (final (event, rows) in [
+      ('INSERT', ['NEW']),
+      ('UPDATE', ['OLD', 'NEW']),
+      ('DELETE', ['OLD']),
+    ])
+      """CREATE TRIGGER sync_${table}_${event.toLowerCase()}
+      AFTER $event ON $table
+      WHEN (SELECT value FROM sync_meta WHERE key='applying') IS NOT '1'
+      BEGIN
+        ${rows.map((r) => "DELETE FROM sync_outbox WHERE tbl='$table' AND pk=${syncPkSql(table, r)}; INSERT INTO sync_outbox VALUES('$table', ${syncPkSql(table, r)}, CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));").join('\n        ')}
+      END""",
 ];

@@ -1,0 +1,8 @@
+name = "vocab-sync"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "vocabapp-sync"
+database_id = "c3f9fe66-b92a-4699-a1f0-3a8970049622"

@@ -16,6 +16,8 @@ import 'package:vocabapp/domain/scheduler.dart';
 import 'package:vocabapp/services/backup_service.dart';
 import 'package:vocabapp/ui/import_page.dart';
 
+import 'sync_schema_helper.dart';
+
 List<ImportTable> parse(
   String text, {
   String extension = 'json',
@@ -482,6 +484,7 @@ void main() {
     );
     await lib.review((await lib.studyQueue()).single, Rating.good, 'review');
     final cards = await first.query('cards');
+    await dropSyncSchema(first);
     await first.execute('DROP TABLE import_batches');
     for (final f in ['part_of_speech', 'pronunciation', 'note']) {
       await first.execute('ALTER TABLE senses DROP COLUMN $f');
@@ -490,7 +493,7 @@ void main() {
     await first.close();
     final db = await openVocabularyDatabase(databaseFactoryFfiNoIsolate, path);
     try {
-      expect(await db.getVersion(), 3);
+      expect(await db.getVersion(), 4);
       expect(await db.query('cards'), cards);
       expect((await db.query('review_events')).single['id'], 'review');
       expect(await db.query('import_batches'), isEmpty);

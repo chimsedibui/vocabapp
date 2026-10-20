@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:timezone/data/latest.dart' as tz;
@@ -6,6 +9,7 @@ import 'package:vocabapp/data/database.dart';
 import 'package:vocabapp/data/library_repository.dart';
 import 'package:vocabapp/ui/app.dart';
 import 'package:vocabapp/ui/review_page.dart';
+import 'package:vocabapp/ui/ui_scale.dart';
 
 void main() {
   tz.initializeTimeZones();
@@ -109,4 +113,60 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets('UI zoom scales layout and responds to keyboard shortcuts', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final scale = UiScaleController();
+    addTearDown(scale.dispose);
+    await tester.pumpWidget(VocabApp(repository: repo, uiScale: scale));
+    await tester.pumpAndSettle();
+    expect(find.byType(NavigationRail), findsOneWidget);
+
+    await tester.tap(find.text('Cài đặt').last);
+    await tester.pumpAndSettle();
+    for (var i = 0; i < 4; i++) {
+      await tester.tap(find.byTooltip('Phóng to'));
+      await tester.pumpAndSettle();
+    }
+    expect(scale.value, 1.5);
+    expect(find.text('150%'), findsOneWidget);
+    // 1200 px at 150% is an 800 px logical viewport: compact navigation.
+    expect(find.byType(NavigationRail), findsNothing);
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit0);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(scale.value, 1);
+    expect(find.byType(NavigationRail), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  test(
+    'UI zoom ignores a corrupt preference file and persists the last value',
+    () async {
+      final dir = Directory.systemTemp.createTempSync('vocab-ui');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final file = File('${dir.path}/ui.json')..writeAsStringSync('{oops');
+      final scale = await UiScaleController.load(file);
+      addTearDown(scale.dispose);
+      expect(scale.value, 1);
+      scale
+        ..zoomOut()
+        ..zoomIn()
+        ..zoomIn();
+      await scale.saved;
+      expect(scale.value, 1.1);
+      final reloaded = await UiScaleController.load(file);
+      addTearDown(reloaded.dispose);
+      expect(reloaded.value, 1.1);
+    },
+  );
 }

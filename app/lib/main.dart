@@ -1,16 +1,32 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:timezone/data/latest.dart' as tz;
 
 import 'data/database.dart';
 import 'data/library_repository.dart';
+import 'services/sync_service.dart';
 import 'ui/app.dart';
+import 'ui/ui_scale.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   tz.initializeTimeZones();
   try {
     final db = await openAppDatabase();
-    runApp(VocabApp(repository: LibraryRepository(db)));
+    final dir = await getApplicationSupportDirectory();
+    final uiScale = await UiScaleController.load(
+      File(p.join(dir.path, 'ui.json')),
+    );
+    runApp(
+      VocabApp(
+        repository: LibraryRepository(db),
+        uiScale: uiScale,
+        sync: SyncService(db)..start(),
+      ),
+    );
   } catch (_) {
     // Do not silently reset a database that cannot be opened or migrated.
     runApp(

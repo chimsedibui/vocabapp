@@ -7,6 +7,7 @@ import '../domain/models.dart';
 import '../domain/passage.dart';
 import '../services/ai_configuration.dart';
 import '../services/passage_service.dart';
+import 'ids.dart';
 import 'library_repository.dart';
 
 class ReviewedItem {
@@ -185,7 +186,7 @@ class PassageRepository {
         whereArgs: [item.term],
       );
       final entryId = entries.isEmpty
-          ? _uuid.v4()
+          ? Ids.entry(item.term, 'en', 'vi')
           : entries.single['id'] as String;
       if (entries.isEmpty) {
         await tx.insert('entries', {
@@ -215,12 +216,14 @@ class PassageRepository {
             )
             .firstOrNull;
       }
-      final senseId = existing?['id'] as String? ?? _uuid.v4();
+      final senseKey = 'ai-${_uuid.v4()}';
+      final senseId =
+          existing?['id'] as String? ?? Ids.sense(entryId, senseKey);
       if (existing == null) {
         await tx.insert('senses', {
           'id': senseId,
           'entry_id': entryId,
-          'sense_key': 'ai-${_uuid.v4()}',
+          'sense_key': senseKey,
           'meaning': item.meaning,
           'search_text': '${item.term} ${item.meaning}'.toLowerCase(),
           'status': 'approved',
@@ -236,7 +239,10 @@ class PassageRepository {
         added++;
       }
       if (existing == null || existing['status'] == 'draft') {
-        await tx.insert('cards', {'id': _uuid.v4(), 'sense_id': senseId});
+        await tx.insert('cards', {
+          'id': Ids.card(senseId),
+          'sense_id': senseId,
+        });
       }
       await tx.insert('deck_entries', {
         'deck_id': deckId,

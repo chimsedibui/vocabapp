@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 
 import '../domain/models.dart';
 import '../domain/scheduler.dart';
+import 'ids.dart';
 
 class LibraryRepository {
   LibraryRepository(this.db, {DateTime Function()? clock})
@@ -49,12 +50,9 @@ class LibraryRepository {
     if (normalized.isEmpty || normalized.length > 120) {
       throw const UserFacingException('Tên nhóm cần từ 1 đến 120 ký tự.');
     }
-    final id = _uuid.v4();
-    await db.insert('decks', {
-      'id': id,
-      'deck_key': 'group-$id',
-      'name': normalized,
-    });
+    final key = 'group-${_uuid.v4()}';
+    final id = Ids.deck(key);
+    await db.insert('decks', {'id': id, 'deck_key': key, 'name': normalized});
     return id;
   }
 
@@ -147,7 +145,7 @@ class LibraryRepository {
       whereArgs: [word, 'en', 'vi'],
     );
     final entryId = matches.isEmpty
-        ? _uuid.v4()
+        ? Ids.entry(word, 'en', 'vi')
         : matches.single['id'] as String;
     if (matches.isEmpty) {
       await tx.insert('entries', {
@@ -174,7 +172,7 @@ class LibraryRepository {
       'entry_id': entryId,
     }, conflictAlgorithm: ConflictAlgorithm.ignore);
     if (existing.isNotEmpty) return false;
-    final senseId = _uuid.v4();
+    final senseId = Ids.sense(entryId, key);
     await tx.insert('senses', {
       'id': senseId,
       'entry_id': entryId,
@@ -184,7 +182,7 @@ class LibraryRepository {
       'status': approve ? 'approved' : 'draft',
     });
     if (approve) {
-      await tx.insert('cards', {'id': _uuid.v4(), 'sense_id': senseId});
+      await tx.insert('cards', {'id': Ids.card(senseId), 'sense_id': senseId});
     }
     return true;
   }
@@ -262,7 +260,10 @@ class LibraryRepository {
           whereArgs: [senseId],
         );
         if (cards.isEmpty) {
-          await tx.insert('cards', {'id': _uuid.v4(), 'sense_id': senseId});
+          await tx.insert('cards', {
+            'id': Ids.card(senseId),
+            'sense_id': senseId,
+          });
         } else {
           final card = cards.single;
           await tx.update(

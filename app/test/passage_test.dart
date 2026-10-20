@@ -22,6 +22,8 @@ import 'package:vocabapp/services/backup_service.dart';
 import 'package:vocabapp/services/passage_service.dart';
 import 'package:vocabapp/ui/passage_page.dart';
 
+import 'sync_schema_helper.dart';
+
 const config = AiConfiguration(
   provider: AiProvider.openai,
   key: 'test-secret',
@@ -594,6 +596,7 @@ void main() {
       'persisted',
     );
     final cards = await first.query('cards');
+    await dropSyncSchema(first);
     await first.execute('DROP TABLE import_batches');
     for (final field in ['part_of_speech', 'pronunciation', 'note']) {
       await first.execute('ALTER TABLE senses DROP COLUMN $field');
@@ -607,7 +610,7 @@ void main() {
       path,
     );
     try {
-      expect(await upgraded.getVersion(), 3);
+      expect(await upgraded.getVersion(), 4);
       expect(await upgraded.query('cards'), cards);
       expect((await upgraded.query('review_events')).single['id'], 'persisted');
       expect(await upgraded.query('passage_jobs'), isEmpty);
