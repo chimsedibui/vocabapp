@@ -4,6 +4,32 @@ String normalizeTerm(String value) =>
     unicode.nfc(value).trim().replaceAll(RegExp(r'\s+'), ' ');
 String normalizeMeaning(String value) => unicode.nfc(value).trim();
 
+/// Allowed `senses.part_of_speech` values, shared by import, editor and AI.
+const partsOfSpeech = {
+  'noun': 'danh từ',
+  'verb': 'động từ',
+  'adjective': 'tính từ',
+  'adverb': 'trạng từ',
+  'pronoun': 'đại từ',
+  'preposition': 'giới từ',
+  'conjunction': 'liên từ',
+  'interjection': 'thán từ',
+  'determiner': 'hạn định từ',
+  'phrase': 'cụm từ',
+  'other': 'khác',
+};
+
+/// IPA without the surrounding slashes or brackets; empty becomes null.
+String? normalizePronunciation(String? value) {
+  if (value == null) return null;
+  final ipa = unicode
+      .nfc(value)
+      .trim()
+      .replaceAll(RegExp(r'^[/\[]+|[/\]]+$'), '')
+      .trim();
+  return ipa.isEmpty ? null : ipa;
+}
+
 class UserFacingException implements Exception {
   const UserFacingException(this.message);
   final String message;
@@ -28,9 +54,12 @@ class Vocabulary {
     required this.status,
     required this.groups,
     required this.suspended,
+    this.partOfSpeech,
+    this.pronunciation,
   });
   final String entryId, senseId, term, meaning, senseKey, status, groups;
   final bool suspended;
+  final String? partOfSpeech, pronunciation;
 }
 
 class StudyCard {
@@ -43,9 +72,12 @@ class StudyCard {
     required this.intervalDays,
     required this.lapses,
     required this.revision,
+    this.partOfSpeech,
+    this.pronunciation,
   });
   final String id, term, meaning, senseKey, state;
   final int intervalDays, lapses, revision;
+  final String? partOfSpeech, pronunciation;
 }
 
 class StudyStats {

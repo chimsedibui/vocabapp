@@ -22,6 +22,17 @@ Triển khai ngày 19/10/2026. Phần này ghi hành vi thực tế, bổ sung c
 - Cache 30 ngày (chỉ job đủ mọi phần) theo hash nguồn NFC/newlines + mức/số mục + provider/endpoint/model/context/mode + prompt/schema version. Key bí mật và nhóm không thuộc cache key. Nút Tạo lại chủ động bỏ cache. Cache hiện được tái sử dụng khi cấu hình API còn đọc được; khi không có key có thể mở lại kết quả cũ trong lịch sử mà không gọi mạng.
 - Lưu usage số input/output/total và cached/reasoning details nếu provider trả; không có thì `null`, không suy từ độ dài JSON. Response lỗi không có usage thì chi phí không xác định. Không log response/raw passage. UI Xem usage mở accounting JSON local của job.
 
+## Loại từ, phiên âm và phát âm
+
+- Contract v2 (cache key `passage-v2`): mỗi mục thêm `pos` (enum: noun, verb, adjective, adverb, pronoun, preposition, conjunction, interjection, determiner, phrase, other — cùng danh sách với import) và `ipa` (IPA Mỹ, không dấu gạch chéo). Hai trường này là phụ: giá trị lạ/IPA > 80 ký tự bị bỏ, không làm hỏng cả kết quả. Kết quả v1 đã lưu (3 trường) vẫn mở/duyệt được; trường lạ khác vẫn bị từ chối.
+- Duyệt: nghĩa mới lưu `part_of_speech`/`pronunciation`; nghĩa có sẵn chỉ được điền chỗ trống, không ghi đè giá trị người dùng/import đã đặt.
+- Form sửa từ có Từ loại + Phiên âm IPA; IPA lưu không kèm `/…/` hoặc `[…]` (import cũng chuẩn hóa như vậy).
+- Nút loa đọc từ bằng giọng có sẵn của máy, offline: Windows dùng SAPI (ưu tiên giọng en-US, cả OneCore), Android dùng TextToSpeech (`Locale.US`). Không có giọng tiếng Anh thì báo, không đọc bằng giọng khác.
+
+## Chạy nền trên Windows
+
+Bấm X thu xuống khay (menu Mở/Thoát); mở lại app khi đang chạy sẽ đưa cửa sổ cũ lên. Ctrl+Alt+Q (đổi trong Cài đặt) gửi Ctrl+C tới app đang focus, đọc chữ, trả lại clipboard text trước đó và mở popup cạnh con trỏ: nghĩa có sẵn trong thư viện (offline) + tra AI qua luồng passage (cache, A1+, 1 phần), thêm vào nhóm bằng duyệt passage. "Mở cùng Windows" ghi `HKCU\…\Run\VocabApp` với `--autostart` (chạy ẩn ở khay); Setup dùng mutex `VocabApp.SingleInstance` để đóng app khi cập nhật và xóa giá trị Run khi gỡ. Toàn bộ nằm trong `app/windows/runner`.
+
 ## Dữ liệu và tương thích
 
 DB version 2 thêm passage_jobs (nguồn, settings, hash, kết quả, attempts/usage/trạng thái) và sense_origins (job, mức được duyệt, nguồn mức llm/user, provider/model). Chỉnh CEFR khi duyệt ghi level_source=user; không lấy CEFR làm độ khó cá nhân của thuật toán ôn. Giữ nguyên nghĩa cũ khác nghĩa AI thì không gắn nhãn CEFR AI cho nghĩa cũ đó.

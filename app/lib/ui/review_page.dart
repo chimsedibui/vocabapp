@@ -6,6 +6,7 @@ import '../data/library_repository.dart';
 import '../domain/models.dart';
 import '../domain/scheduler.dart';
 import 'editors.dart';
+import 'word_details.dart';
 
 class ReviewPage extends StatefulWidget {
   const ReviewPage({super.key, required this.repository, this.deckId});
@@ -171,7 +172,14 @@ class _ReviewPageState extends State<ReviewPage> {
                                         ?.copyWith(fontWeight: FontWeight.w600),
                                     textAlign: TextAlign.center,
                                   ),
-                                  const SizedBox(height: 32),
+                                  const SizedBox(height: 8),
+                                  WordDetails(
+                                    term: card.term,
+                                    partOfSpeech: card.partOfSpeech,
+                                    pronunciation: card.pronunciation,
+                                    alignment: WrapAlignment.center,
+                                  ),
+                                  const SizedBox(height: 16),
                                   if (_revealed) ...[
                                     const Divider(),
                                     const SizedBox(height: 24),

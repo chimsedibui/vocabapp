@@ -11,6 +11,7 @@ import 'editors.dart';
 import 'data_settings.dart';
 import 'desktop_settings.dart';
 import 'lookup_popup.dart';
+import 'word_details.dart';
 import 'review_page.dart';
 import 'ai_settings.dart';
 import 'passage_page.dart';
@@ -920,6 +921,12 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
               ),
+              if (word.partOfSpeech != null || word.pronunciation != null)
+                WordDetails(
+                  term: word.term,
+                  partOfSpeech: word.partOfSpeech,
+                  pronunciation: word.pronunciation,
+                ),
               if (word.groups.isNotEmpty) ...[
                 const SizedBox(height: 4),
                 Text(word.groups, style: const TextStyle(fontSize: 12)),

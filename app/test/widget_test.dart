@@ -46,6 +46,8 @@ void main() {
     await tester.tap(find.text('Hiện nghĩa'));
     await tester.pumpAndSettle();
     expect(find.text('giữ lại'), findsOneWidget);
+    await tester.ensureVisible(find.text('Nhớ'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Nhớ'));
     await tester.pumpAndSettle();
     expect(find.text('Đã lưu 1 lượt ôn'), findsOneWidget);

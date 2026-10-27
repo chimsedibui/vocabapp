@@ -67,6 +67,8 @@ class _WordEditorState extends State<WordEditor> {
   late final _term = TextEditingController(text: widget.word?.term);
   late final _meaning = TextEditingController(text: widget.word?.meaning);
   final _sense = TextEditingController(text: 'primary');
+  late final _ipa = TextEditingController(text: widget.word?.pronunciation);
+  late String? _pos = widget.word?.partOfSpeech;
   late String? _deck = widget.initialDeck ?? widget.decks.firstOrNull?.id;
   bool _busy = false, _reset = false;
   String? _error;
@@ -75,6 +77,7 @@ class _WordEditorState extends State<WordEditor> {
     _term.dispose();
     _meaning.dispose();
     _sense.dispose();
+    _ipa.dispose();
     super.dispose();
   }
 
@@ -91,6 +94,7 @@ class _WordEditorState extends State<WordEditor> {
           _meaning.text,
           approve: approve,
           resetSchedule: _reset,
+          details: (partOfSpeech: _pos, pronunciation: _ipa.text),
         );
       } else {
         if (_deck == null) {
@@ -102,6 +106,8 @@ class _WordEditorState extends State<WordEditor> {
           deckId: _deck!,
           senseKey: _sense.text,
           approve: approve,
+          partOfSpeech: _pos,
+          pronunciation: _ipa.text,
         );
       }
       if (mounted) Navigator.pop(context, true);
@@ -171,6 +177,36 @@ class _WordEditorState extends State<WordEditor> {
                   labelText: 'Nghĩa ngắn',
                   hintText: 'Có thể để trống nếu lưu nháp',
                 ),
+              ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String?>(
+                      initialValue: _pos,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Từ loại'),
+                      items: [
+                        const DropdownMenuItem(value: null, child: Text('—')),
+                        for (final e in partsOfSpeech.entries)
+                          DropdownMenuItem(value: e.key, child: Text(e.value)),
+                      ],
+                      onChanged: _busy ? null : (v) => setState(() => _pos = v),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _ipa,
+                      maxLength: 200,
+                      autocorrect: false,
+                      decoration: const InputDecoration(
+                        labelText: 'Phiên âm IPA',
+                        hintText: 'pəˈsɪstənt',
+                      ),
+                    ),
+                  ),
+                ],
               ),
               if (widget.word == null)
                 ExpansionTile(

@@ -105,6 +105,8 @@ class LibraryRepository {
     required String deckId,
     String senseKey = 'primary',
     bool approve = true,
+    String? partOfSpeech,
+    String? pronunciation,
   }) => db.transaction(
     (tx) => _addWord(
       tx,
@@ -113,8 +115,19 @@ class LibraryRepository {
       deckId: deckId,
       senseKey: senseKey,
       approve: approve,
+      partOfSpeech: partOfSpeech,
+      pronunciation: pronunciation,
     ),
   );
+
+  static void _checkDetails(String? partOfSpeech, String? pronunciation) {
+    if ((partOfSpeech != null && !partsOfSpeech.containsKey(partOfSpeech)) ||
+        (pronunciation != null && pronunciation.length > 200)) {
+      throw const UserFacingException(
+        'Từ loại không hợp lệ hoặc phiên âm dài quá 200 ký tự.',
+      );
+    }
+  }
 
   Future<bool> _addWord(
     DatabaseExecutor tx, {
@@ -123,7 +136,11 @@ class LibraryRepository {
     required String deckId,
     required String senseKey,
     required bool approve,
+    String? partOfSpeech,
+    String? pronunciation,
   }) async {
+    final ipa = normalizePronunciation(pronunciation);
+    _checkDetails(partOfSpeech, ipa);
     final word = normalizeTerm(term);
     final definition = normalizeMeaning(meaning);
     final key = senseKey.trim();
@@ -180,6 +197,8 @@ class LibraryRepository {
       'meaning': definition,
       'search_text': '$word $definition'.toLowerCase(),
       'status': approve ? 'approved' : 'draft',
+      'part_of_speech': partOfSpeech,
+      'pronunciation': ipa,
     });
     if (approve) {
       await tx.insert('cards', {'id': Ids.card(senseId), 'sense_id': senseId});
@@ -221,8 +240,13 @@ class LibraryRepository {
     String meaning, {
     required bool approve,
     bool resetSchedule = false,
+
+    /// Replaces part of speech and IPA; null keeps the stored ones.
+    ({String? partOfSpeech, String? pronunciation})? details,
   }) async {
     final definition = normalizeMeaning(meaning);
+    final ipa = normalizePronunciation(details?.pronunciation);
+    _checkDetails(details?.partOfSpeech, ipa);
     if (definition.length > 1000 || (approve && definition.isEmpty)) {
       throw const UserFacingException(
         'Nghĩa cần từ 1 đến 1000 ký tự trước khi duyệt.',
@@ -248,6 +272,10 @@ class LibraryRepository {
           'meaning': definition,
           'search_text': '${row['term']} $definition'.toLowerCase(),
           'status': approve ? 'approved' : 'draft',
+          if (details != null) ...{
+            'part_of_speech': details.partOfSpeech,
+            'pronunciation': ipa,
+          },
           'content_revision': (row['content_revision'] as int) + 1,
         },
         where: 'id=?',
@@ -318,6 +346,7 @@ class LibraryRepository {
     if (draftsOnly) conditions.add("s.status='draft'");
     final rows = await db.rawQuery(
       '''SELECT e.id entry_id, e.term, s.id sense_id, s.meaning, s.sense_key, s.status,
+      s.part_of_speech, s.pronunciation,
       coalesce(c.suspended,0) suspended,
       (SELECT group_concat(d.name, ', ') FROM decks d JOIN deck_entries de ON de.deck_id=d.id WHERE de.entry_id=e.id AND d.archived=0) groups
       FROM senses s JOIN entries e ON s.entry_id=e.id LEFT JOIN cards c ON c.sense_id=s.id
@@ -335,6 +364,8 @@ class LibraryRepository {
             status: r['status'] as String,
             groups: r['groups'] as String? ?? 'Chưa có nhóm',
             suspended: r['suspended'] == 1,
+            partOfSpeech: r['part_of_speech'] as String?,
+            pronunciation: r['pronunciation'] as String?,
           ),
         )
         .toList();
@@ -396,7 +427,9 @@ class LibraryRepository {
     final group = deckId == null
         ? ''
         : 'AND EXISTS(SELECT 1 FROM deck_entries de WHERE de.entry_id=e.id AND de.deck_id=?)';
-    const base = '''SELECT c.*, e.term, s.meaning, s.sense_key FROM cards c
+    const base =
+        '''SELECT c.*, e.term, s.meaning, s.sense_key, s.part_of_speech,
+      s.pronunciation FROM cards c
       JOIN senses s ON s.id=c.sense_id JOIN entries e ON e.id=s.entry_id
       WHERE c.suspended=0 AND s.status='approved' ''';
     final due = await tx.rawQuery(
@@ -418,6 +451,8 @@ class LibraryRepository {
             intervalDays: r['interval_days'] as int,
             lapses: r['lapses'] as int,
             revision: r['revision'] as int,
+            partOfSpeech: r['part_of_speech'] as String?,
+            pronunciation: r['pronunciation'] as String?,
           ),
         )
         .toList();

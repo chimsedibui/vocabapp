@@ -339,7 +339,9 @@ ImportRow validateImportRow(
         : (field == 'term' || field == 'deck_name'
               ? normalizeTerm(value as String)
               : normalizeMeaning(value as String));
-    values[field] = normalized.isEmpty ? null : normalized;
+    values[field] = field == 'pronunciation'
+        ? normalizePronunciation(normalized)
+        : (normalized.isEmpty ? null : normalized);
   }
   String text(String field) => values[field] as String? ?? '';
   for (final field in [
@@ -377,19 +379,7 @@ ImportRow validateImportRow(
     errors.add('Bản này chỉ nhập Anh (en) → Việt (vi).');
   }
   if (values['part_of_speech'] != null &&
-      ![
-        'noun',
-        'verb',
-        'adjective',
-        'adverb',
-        'pronoun',
-        'preposition',
-        'conjunction',
-        'interjection',
-        'determiner',
-        'phrase',
-        'other',
-      ].contains(values['part_of_speech'])) {
+      !partsOfSpeech.containsKey(values['part_of_speech'])) {
     errors.add('Từ loại không hợp lệ.');
   }
   return ImportRow(number, values, errors, original: Map.of(input));

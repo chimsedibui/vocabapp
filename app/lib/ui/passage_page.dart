@@ -11,6 +11,7 @@ import '../services/ai_configuration.dart';
 import '../services/passage_service.dart';
 import 'ai_settings.dart';
 import 'editors.dart';
+import 'word_details.dart';
 
 class PassagePage extends StatefulWidget {
   const PassagePage({
@@ -30,14 +31,23 @@ class _Proposal {
   _Proposal(PassageItem item)
     : term = item.term,
       level = item.level,
+      partOfSpeech = item.partOfSpeech,
+      pronunciation = item.pronunciation,
       meaning = TextEditingController(text: item.meaning);
   final String term;
+  final String? partOfSpeech, pronunciation;
   String level;
   final TextEditingController meaning;
   bool selected = true;
   List<Vocabulary> matches = [];
   String? existingSense;
-  PassageItem get item => PassageItem(term, level, meaning.text);
+  PassageItem get item => PassageItem(
+    term,
+    level,
+    meaning.text,
+    partOfSpeech: partOfSpeech,
+    pronunciation: pronunciation,
+  );
 }
 
 class _PassagePageState extends State<PassagePage> {
@@ -427,6 +437,11 @@ class _PassagePageState extends State<PassagePage> {
             subtitle: Text(
               '${p.level} · mức ước lượng${p.matches.isEmpty ? '' : ' · đã có ${p.matches.length} nghĩa trong thư viện'}',
             ),
+          ),
+          WordDetails(
+            term: p.term,
+            partOfSpeech: p.partOfSpeech,
+            pronunciation: p.pronunciation,
           ),
           TextField(
             controller: p.meaning,

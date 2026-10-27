@@ -34,6 +34,43 @@ void main() {
       .addWord(term: term, meaning: meaning, deckId: deck, senseKey: key)
       .then((_) {});
 
+  test(
+    'part of speech and IPA are stored, shown and kept unless edited',
+    () async {
+      await repo.addWord(
+        term: 'persistent',
+        meaning: 'dai dẳng',
+        deckId: deck,
+        partOfSpeech: 'adjective',
+        pronunciation: ' /pəˈsɪstənt/ ',
+      );
+      var word = (await repo.vocabulary()).single;
+      expect(word.partOfSpeech, 'adjective');
+      expect(word.pronunciation, 'pəˈsɪstənt');
+      expect((await repo.studyQueue()).single.pronunciation, 'pəˈsɪstənt');
+      await repo.saveMeaning(word.senseId, 'bền bỉ', approve: true);
+      word = (await repo.vocabulary()).single;
+      expect(word.partOfSpeech, 'adjective');
+      await repo.saveMeaning(
+        word.senseId,
+        'bền bỉ',
+        approve: true,
+        details: (partOfSpeech: null, pronunciation: '[pɚˈsɪstənt]'),
+      );
+      word = (await repo.vocabulary()).single;
+      expect(word.partOfSpeech, isNull);
+      expect(word.pronunciation, 'pɚˈsɪstənt');
+      expect(
+        () => repo.addWord(
+          term: 'x',
+          meaning: 'y',
+          deckId: deck,
+          partOfSpeech: 'adj',
+        ),
+        throwsA(isA<UserFacingException>()),
+      );
+    },
+  );
   test('multi-sense / multi-deck does not duplicate cards, Unicode NFC keeps identity', () async {
     await add('bank', key: 'financial', meaning: 'ngân hàng');
     await add('bank', key: 'river', meaning: 'bờ sông');

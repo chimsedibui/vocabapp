@@ -228,6 +228,18 @@ bool FlutterWindow::OnCreate() {
   // GetHandle() is already null when OnDestroy runs.
   hwnd_ = GetHandle();
   taskbar_created_ = ::RegisterWindowMessage(L"TaskbarCreated");
+  speech_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(), "vocabapp/speech",
+          &flutter::StandardMethodCodec::GetInstance());
+  speech_channel_->SetMethodCallHandler([this](const auto& call, auto result) {
+    if (call.method_name() != "speak") {
+      result->NotImplemented();
+      return;
+    }
+    result->Success(flutter::EncodableValue(
+        Speak(StringArgument(call.arguments(), "text"))));
+  });
   AddTrayIcon();
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -247,6 +259,11 @@ void FlutterWindow::OnDestroy() {
   if (hotkey_) ::UnregisterHotKey(hwnd_, kHotkeyId);
   hotkey_ = 0;
   channel_ = nullptr;
+  speech_channel_ = nullptr;
+  if (voice_) {
+    voice_->Release();
+    voice_ = nullptr;
+  }
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
@@ -433,6 +450,46 @@ bool FlutterWindow::RegisterSelectionHotkey(UINT key) {
   }
   hotkey_ = key;
   return true;
+}
+
+// Picks an English SAPI voice once; desktop voices first, then the OneCore
+// voices that newer Windows installs ship with.
+bool FlutterWindow::Speak(const std::wstring& text) {
+  if (!voice_) {
+    if (FAILED(::CoCreateInstance(CLSID_SpVoice, nullptr, CLSCTX_ALL,
+                                  IID_ISpVoice,
+                                  reinterpret_cast<void**>(&voice_)))) {
+      voice_ = nullptr;
+      return false;
+    }
+    const wchar_t* categories[] = {
+        SPCAT_VOICES,
+        L"HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Speech_OneCore\\Voices"};
+    for (const wchar_t* id : categories) {
+      if (voice_ready_) break;
+      ISpObjectTokenCategory* category = nullptr;
+      if (FAILED(::CoCreateInstance(CLSID_SpObjectTokenCategory, nullptr,
+                                    CLSCTX_ALL, IID_ISpObjectTokenCategory,
+                                    reinterpret_cast<void**>(&category)))) {
+        continue;
+      }
+      IEnumSpObjectTokens* tokens = nullptr;
+      if (SUCCEEDED(category->SetId(id, FALSE)) &&
+          SUCCEEDED(category->EnumTokens(L"Language=409", nullptr, &tokens))) {
+        ISpObjectToken* token = nullptr;
+        if (tokens->Next(1, &token, nullptr) == S_OK) {
+          voice_ready_ = SUCCEEDED(voice_->SetVoice(token));
+          token->Release();
+        }
+        tokens->Release();
+      }
+      category->Release();
+    }
+  }
+  if (!voice_ready_ || text.empty()) return false;
+  return SUCCEEDED(voice_->Speak(
+      text.c_str(), SPF_ASYNC | SPF_PURGEBEFORESPEAK | SPF_IS_NOT_XML,
+      nullptr));
 }
 
 void FlutterWindow::Quit() {

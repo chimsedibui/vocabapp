@@ -10,6 +10,7 @@ import '../domain/passage.dart';
 import '../services/ai_configuration.dart';
 import '../services/passage_service.dart';
 import 'editors.dart';
+import 'word_details.dart';
 
 /// Small window opened by the selection hotkey. Library matches show
 /// offline; new text goes through the passage flow (cache first, one part),
@@ -199,7 +200,17 @@ class _LookupPopupState extends State<LookupPopup> {
                           contentPadding: EdgeInsets.zero,
                           leading: const Icon(Icons.check_circle_outline),
                           title: Text(v.term),
-                          subtitle: Text(v.meaning),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              WordDetails(
+                                term: v.term,
+                                partOfSpeech: v.partOfSpeech,
+                                pronunciation: v.pronunciation,
+                              ),
+                              Text(v.meaning),
+                            ],
+                          ),
                         ),
                       const Divider(),
                     ],
@@ -207,7 +218,17 @@ class _LookupPopupState extends State<LookupPopup> {
                       ListTile(
                         contentPadding: EdgeInsets.zero,
                         title: Text('${item.term} · ${item.level}'),
-                        subtitle: Text(item.meaning),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            WordDetails(
+                              term: item.term,
+                              partOfSpeech: item.partOfSpeech,
+                              pronunciation: item.pronunciation,
+                            ),
+                            Text(item.meaning),
+                          ],
+                        ),
                         trailing: _added.contains(item)
                             ? const Icon(Icons.done)
                             : IconButton(

@@ -377,6 +377,51 @@ void main() {
     );
     expect(calls, 0);
   });
+  test(
+    'pos and IPA: kept when valid, dropped when odd, legacy results load',
+    () {
+      final rows = validatePassageResult(
+        jsonEncode({
+          'items': [
+            {
+              'term': 'persistent',
+              'level': 'B2',
+              'meaning': 'dai dẳng',
+              'pos': 'adjective',
+              'ipa': '/pəˈsɪstənt/',
+            },
+            {
+              'term': 'effort',
+              'level': 'B1',
+              'meaning': 'nỗ lực',
+              'pos': 'adj.',
+              'ipa': '',
+            },
+            {'term': 'retain', 'level': 'B2', 'meaning': 'giữ lại'},
+          ],
+        }),
+        request,
+      ).items;
+      expect(rows[0].partOfSpeech, 'adjective');
+      expect(rows[0].pronunciation, 'pəˈsɪstənt');
+      expect(rows[1].partOfSpeech, isNull);
+      expect(rows[1].pronunciation, isNull);
+      expect(rows[2].toJson().keys, ['term', 'level', 'meaning']);
+      expect(
+        () => validatePassageResult(
+          jsonEncode({
+            'items': [
+              {...rows[0].toJson(), 'example': 'x'},
+            ],
+          }),
+          request,
+        ),
+        throwsA(isA<UserFacingException>()),
+      );
+      expect(jsonEncode(passageSchema), contains('"pos"'));
+      expect(request.instruction, contains('ipa'));
+    },
+  );
   group('long passages', () {
     final paragraph = List.generate(
       40,
@@ -530,6 +575,54 @@ void main() {
       deck = (await library.decks()).single.id;
     });
     tearDown(() async => db.close());
+    test(
+      'approval stores AI pos/IPA and only fills gaps on existing senses',
+      () async {
+        const rich = PassageItem(
+          'persistent',
+          'B2',
+          'dai dẳng',
+          partOfSpeech: 'adjective',
+          pronunciation: 'pəˈsɪstənt',
+        );
+        Future<String> job(PassageItem i) async {
+          final id = await repo.create(request, const AiPreferences(config));
+          await repo.completeParts(
+            id,
+            PartsExtraction(
+              validatePassageResult(output([i]), request),
+              config,
+              {0},
+              1,
+              null,
+            ),
+          );
+          return id;
+        }
+
+        await repo.approve(await job(rich), deck, [const ReviewedItem(rich)]);
+        var word = (await library.vocabulary()).single;
+        expect(word.partOfSpeech, 'adjective');
+        expect(word.pronunciation, 'pəˈsɪstənt');
+        await library.saveMeaning(
+          word.senseId,
+          'dai dẳng',
+          approve: true,
+          details: (partOfSpeech: 'adjective', pronunciation: null),
+        );
+        const other = PassageItem(
+          'persistent',
+          'B2',
+          'dai dẳng',
+          partOfSpeech: 'noun',
+          pronunciation: 'pɚˈsɪstənt',
+        );
+        await repo.approve(await job(other), deck, [const ReviewedItem(other)]);
+        word = (await library.vocabulary()).single;
+        expect(word.partOfSpeech, 'adjective');
+        expect(word.pronunciation, 'pɚˈsɪstənt');
+      },
+    );
     test(
       'partial jobs are not cache hits but resume their done parts',
       () async {

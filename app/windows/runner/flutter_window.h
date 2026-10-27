@@ -5,6 +5,7 @@
 #include <flutter/encodable_value.h>
 #include <flutter/flutter_view_controller.h>
 #include <flutter/method_channel.h>
+#include <sapi.h>
 
 #include <memory>
 #include <string>
@@ -47,6 +48,7 @@ class FlutterWindow : public Win32Window {
   void EndPopup(bool show);
   bool RegisterSelectionHotkey(UINT key);
   void Quit();
+  bool Speak(const std::wstring& text);
 
   // The project to run.
   flutter::DartProject project_;
@@ -54,6 +56,10 @@ class FlutterWindow : public Win32Window {
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      speech_channel_;
+  ISpVoice* voice_ = nullptr;
+  bool voice_ready_ = false;
 
   HWND hwnd_ = nullptr;
   bool start_hidden_ = false;

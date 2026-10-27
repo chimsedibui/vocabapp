@@ -195,6 +195,8 @@ class PassageRepository {
             status: r['status'] as String,
             groups: '',
             suspended: false,
+            partOfSpeech: r['part_of_speech'] as String?,
+            pronunciation: r['pronunciation'] as String?,
           ),
         )
         .toList();
@@ -294,6 +296,8 @@ class PassageRepository {
           'meaning': item.meaning,
           'search_text': '${item.term} ${item.meaning}'.toLowerCase(),
           'status': 'approved',
+          'part_of_speech': item.partOfSpeech,
+          'pronunciation': item.pronunciation,
         });
         added++;
       } else if (existing['status'] == 'draft') {
@@ -318,6 +322,15 @@ class PassageRepository {
       // A user-selected older meaning may differ from the model's meaning; do not mislabel it.
       if (selection.existingSenseId == null ||
           existing?['meaning'] == item.meaning) {
+        if (existing != null) {
+          // Fill gaps only; never overwrite what the user or an import set.
+          await tx.rawUpdate(
+            'UPDATE senses SET part_of_speech=coalesce(part_of_speech, ?), '
+            'pronunciation=coalesce(pronunciation, ?) WHERE id=? '
+            'AND (part_of_speech IS NULL OR pronunciation IS NULL)',
+            [item.partOfSpeech, item.pronunciation, senseId],
+          );
+        }
         await tx.insert('sense_origins', {
           'id': _uuid.v4(),
           'sense_id': senseId,
