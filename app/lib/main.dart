@@ -7,6 +7,7 @@ import 'package:timezone/data/latest.dart' as tz;
 
 import 'data/database.dart';
 import 'data/library_repository.dart';
+import 'services/desktop_shell.dart';
 import 'services/sync_service.dart';
 import 'ui/app.dart';
 import 'ui/ui_scale.dart';
@@ -20,11 +21,22 @@ Future<void> main() async {
     final uiScale = await UiScaleController.load(
       File(p.join(dir.path, 'ui.json')),
     );
+    DesktopShell? desktop;
+    if (DesktopShell.supported) {
+      desktop = DesktopShell(File(p.join(dir.path, 'desktop.json')));
+      try {
+        await desktop.start();
+      } catch (_) {
+        // Without the native shell the app still works as a normal window.
+        desktop = null;
+      }
+    }
     runApp(
       VocabApp(
         repository: LibraryRepository(db),
         uiScale: uiScale,
         sync: SyncService(db)..start(),
+        desktop: desktop,
       ),
     );
   } catch (_) {

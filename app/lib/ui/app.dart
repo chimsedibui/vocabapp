@@ -5,9 +5,12 @@ import 'package:flutter/material.dart';
 
 import '../data/library_repository.dart';
 import '../domain/models.dart';
+import '../services/desktop_shell.dart';
 import '../services/sync_service.dart';
 import 'editors.dart';
 import 'data_settings.dart';
+import 'desktop_settings.dart';
+import 'lookup_popup.dart';
 import 'review_page.dart';
 import 'ai_settings.dart';
 import 'passage_page.dart';
@@ -21,11 +24,15 @@ class VocabApp extends StatefulWidget {
     required this.repository,
     this.uiScale,
     this.sync,
+    this.desktop,
   });
   final LibraryRepository repository;
 
   /// Optional replication; without it the app stays local-only.
   final SyncService? sync;
+
+  /// Windows tray and selection hotkey; null elsewhere and in tests.
+  final DesktopShell? desktop;
 
   /// Zoom preference; tests and previews get a non-persistent 100% default.
   final UiScaleController? uiScale;
@@ -35,9 +42,46 @@ class VocabApp extends StatefulWidget {
 
 class _VocabAppState extends State<VocabApp> {
   late final UiScaleController _scale = widget.uiScale ?? UiScaleController();
+  final _subscriptions = <StreamSubscription<void>>[];
+  bool _popup = false;
+  int _lookupId = 0;
+  String? _lookupText;
+
+  @override
+  void initState() {
+    super.initState();
+    final desktop = widget.desktop;
+    if (desktop != null) {
+      _subscriptions
+        ..add(desktop.lookups.listen(_openPopup))
+        ..add(desktop.dismissed.listen((_) => _closePopup()));
+    }
+  }
+
+  Future<void> _openPopup(String? text) async {
+    setState(() {
+      _popup = true;
+      _lookupId++;
+      _lookupText = text;
+    });
+    // Show the window only once the popup is drawn, not the library.
+    await WidgetsBinding.instance.endOfFrame.timeout(
+      const Duration(milliseconds: 300),
+      onTimeout: () {},
+    );
+    if (_popup) await widget.desktop!.showPopup(const Size(460, 520));
+  }
+
+  void _closePopup({bool openApp = false}) {
+    if (mounted) setState(() => _popup = false);
+    widget.desktop?.endPopup(show: openApp);
+  }
 
   @override
   void dispose() {
+    for (final s in _subscriptions) {
+      s.cancel();
+    }
     if (widget.uiScale == null) _scale.dispose();
     super.dispose();
   }
@@ -80,12 +124,34 @@ class _VocabAppState extends State<VocabApp> {
     ),
     builder: (context, child) => ValueListenableBuilder<double>(
       valueListenable: _scale,
-      builder: (context, scale, _) => UiZoom(scale: scale, child: child!),
+      builder: (context, scale, _) => UiZoom(
+        scale: scale,
+        child: Stack(
+          children: [
+            ExcludeFocus(excluding: _popup, child: child!),
+            if (_popup)
+              Positioned.fill(
+                child: Navigator(
+                  key: ValueKey(_lookupId),
+                  onGenerateRoute: (_) => MaterialPageRoute<void>(
+                    builder: (_) => LookupPopup(
+                      library: widget.repository,
+                      text: _lookupText,
+                      onClose: _closePopup,
+                      onOpenApp: () => _closePopup(openApp: true),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
     ),
     home: LibraryHome(
       repository: widget.repository,
       uiScale: _scale,
       sync: widget.sync,
+      desktop: widget.desktop,
     ),
   );
 }
@@ -103,10 +169,12 @@ class LibraryHome extends StatefulWidget {
     required this.repository,
     this.uiScale,
     this.sync,
+    this.desktop,
   });
   final LibraryRepository repository;
   final UiScaleController? uiScale;
   final SyncService? sync;
+  final DesktopShell? desktop;
   @override
   State<LibraryHome> createState() => _LibraryHomeState();
 }
@@ -1005,6 +1073,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       ),
     ];
     final right = [
+      if (widget.desktop != null) DesktopSettings(shell: widget.desktop!),
       if (widget.sync != null) SyncSettings(sync: widget.sync!),
       const AiSettings(),
       DataSettings(

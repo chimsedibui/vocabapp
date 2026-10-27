@@ -19,6 +19,8 @@ OutputBaseFilename=VocabApp-{#MyAppVersion}-Setup
 Compression=lzma2
 SolidCompression=yes
 CloseApplications=yes
+; The app keeps running in the tray; the mutex lets Setup detect and close it.
+AppMutex=VocabApp.SingleInstance
 RestartApplications=no
 UninstallDisplayIcon={app}\vocabapp.exe
 [Tasks]
@@ -28,5 +30,8 @@ Source: "..\app\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ig
 [Icons]
 Name: "{group}\VocabApp"; Filename: "{app}\vocabapp.exe"
 Name: "{autodesktop}\VocabApp"; Filename: "{app}\vocabapp.exe"; Tasks: desktopicon
+[Registry]
+; Start with Windows is set from the app; remove it on uninstall.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "VocabApp"; ValueType: none; Flags: uninsdeletevalue dontcreatekey
 [Run]
 Filename: "{app}\vocabapp.exe"; Description: "Open VocabApp"; Flags: nowait postinstall skipifsilent
