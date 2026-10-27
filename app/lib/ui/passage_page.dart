@@ -51,8 +51,9 @@ class _PassagePageState extends State<PassagePage> {
   List<_Proposal> _proposals = [];
   AiPreferences? _preferences;
   PassageService? _service;
-  bool _busy = true, _loadedResult = false, _atLimit = false;
+  bool _busy = true, _loadedResult = false, _atLimit = false, _partial = false;
   int _removed = 0;
+  String? _progress;
   String? _resultLabel;
   @override
   void initState() {
@@ -121,6 +122,7 @@ class _PassagePageState extends State<PassagePage> {
     }
     _proposals = [];
     _loadedResult = false;
+    _partial = false;
     _jobId = null;
     _resultLabel = null;
   }
@@ -158,6 +160,7 @@ class _PassagePageState extends State<PassagePage> {
       _jobId = id;
       _proposals = proposals;
       _loadedResult = row['status'] == 'complete';
+      _partial = _loadedResult && row['error_text'] != null;
       _removed = row['removed'] as int;
       _atLimit = row['at_limit'] == 1;
       _resultLabel =
@@ -186,30 +189,46 @@ class _PassagePageState extends State<PassagePage> {
         minLevel: _level,
         maxItems: int.tryParse(_max.text) ?? 0,
       );
-      request.checkBudget(prefs.primary.contextWindow);
-      if (prefs.fallback != null) {
-        request.checkBudget(prefs.fallback!.contextWindow);
+      for (final part in request.parts()) {
+        part.checkBudget(prefs.primary.contextWindow);
+        if (prefs.fallback != null) {
+          part.checkBudget(prefs.fallback!.contextWindow);
+        }
       }
-      final cached = regenerate
-          ? null
-          : await _repo.cached(request.cacheKey(prefs.identity));
+      final key = request.cacheKey(prefs.identity);
+      final cached = regenerate ? null : await _repo.cached(key);
       if (cached != null) {
         await _showJob(cached, cached: true);
         return;
       }
-      jobId = await _repo.create(request, prefs);
+      final partial = regenerate ? null : await _repo.partial(key, request);
+      jobId = partial?.id ?? await _repo.create(request, prefs);
       if (!mounted) {
         throw const PassageCancelled();
       }
       setState(
         () => _service = widget.serviceFactory?.call() ?? PassageService(),
       );
-      final response = await _service!.extract(
+      final response = await _service!.extractParts(
         request,
         prefs,
         onAttempt: (a) => _repo.attempt(jobId!, a),
+        done: partial?.done ?? const {},
+        previous: partial?.result,
+        onProgress: (done, total) {
+          if (mounted && total > 1) {
+            setState(() => _progress = 'Đang trích phần ${done + 1}/$total…');
+          }
+        },
       );
-      await _repo.complete(jobId, response);
+      if (response.done.isEmpty) throw response.error!;
+      await _repo.completeParts(
+        jobId,
+        response,
+        missing: response.complete
+            ? null
+            : 'Mới trích ${response.done.length}/${response.parts} phần. ${response.error?.message ?? ''} Bấm "Trích tiếp phần còn lại" để chỉ gọi API cho phần chưa xong.',
+      );
       await _showJob(jobId);
     } catch (e) {
       final error = e is UserFacingException
@@ -219,7 +238,10 @@ class _PassagePageState extends State<PassagePage> {
             );
       if (jobId != null) {
         try {
-          await _repo.fail(jobId, error);
+          // A continued job keeps its earlier parts instead of becoming an error.
+          if ((await _repo.job(jobId))['status'] != 'complete') {
+            await _repo.fail(jobId, error);
+          }
         } catch (_) {
           /* Keep input in the editor even if storage fails. */
         }
@@ -227,6 +249,7 @@ class _PassagePageState extends State<PassagePage> {
       if (mounted) setState(() => _error = error.message);
     } finally {
       _service = null;
+      _progress = null;
       if (mounted) {
         try {
           final history = await _repo.history();
@@ -459,13 +482,21 @@ class _PassagePageState extends State<PassagePage> {
 
   @override
   Widget build(BuildContext context) {
-    int? estimate;
+    String budget = 'Chưa tính được số phần.';
     try {
-      estimate = PassageRequest(
+      final parts = PassageRequest(
         _text.text,
         minLevel: _level,
         maxItems: int.tryParse(_max.text) ?? 0,
-      ).estimatedInputTokens;
+      ).parts();
+      final largest = parts
+          .map((p) => p.estimatedInputTokens)
+          .reduce((a, b) => a > b ? a : b);
+      budget = parts.length == 1
+          ? 'Input ước tính bảo thủ: $largest / 4.000 tokens; output cap: 2.500 tokens. Một lần bấm gọi tối đa 3 HTTP attempts, trong 120 giây.'
+          : 'Chia thành ${parts.length} phần → ${parts.length} request, lần lượt từng phần (input ≤ $largest / 4.000 tokens, output cap 2.500 tokens mỗi phần; mỗi phần tối đa 3 HTTP attempts trong 120 giây). Số mục tối đa được chia cho các phần theo độ dài.';
+    } on UserFacingException catch (e) {
+      budget = e.message;
     } catch (_) {
       /* Validation happens before send. */
     }
@@ -506,7 +537,7 @@ class _PassagePageState extends State<PassagePage> {
                   enabled: !_busy && !_loadedResult,
                   minLines: 5,
                   maxLines: 12,
-                  maxLength: 12000,
+                  maxLength: maxPassageChars,
                   maxLengthEnforcement: MaxLengthEnforcement.none,
                   decoration: const InputDecoration(
                     labelText: 'Passage tiếng Anh',
@@ -541,9 +572,7 @@ class _PassagePageState extends State<PassagePage> {
                   onChanged: (_) => setState(() {}),
                 ),
                 const SizedBox(height: 12),
-                Text(
-                  'Input ước tính bảo thủ: ${estimate ?? '—'} / 4.000 tokens; output cap: 2.500 tokens. Một lần bấm có thể gọi tối đa 3 HTTP attempts, trong 120 giây. Không tự chia đoạn hoặc gọi tiếp.',
-                ),
+                Text(budget),
                 const SizedBox(height: 12),
                 Wrap(
                   spacing: 12,
@@ -555,7 +584,9 @@ class _PassagePageState extends State<PassagePage> {
                           : () => _extract(),
                       icon: const Icon(Icons.auto_awesome_outlined),
                       label: Text(
-                        _busy ? 'Đang xử lý…' : 'Trích từ (ưu tiên cache)',
+                        _busy
+                            ? _progress ?? 'Đang xử lý…'
+                            : 'Trích từ (ưu tiên cache)',
                       ),
                     ),
                     if (_busy && _service != null)
@@ -564,6 +595,11 @@ class _PassagePageState extends State<PassagePage> {
                         child: const Text('Hủy gọi API'),
                       ),
                     if (_loadedResult && !_busy) ...[
+                      if (_partial)
+                        OutlinedButton(
+                          onPressed: () => _extract(),
+                          child: const Text('Trích tiếp phần còn lại'),
+                        ),
                       TextButton(
                         onPressed: () => _extract(regenerate: true),
                         child: const Text('Tạo lại bằng API'),
@@ -659,7 +695,7 @@ class _PassagePageState extends State<PassagePage> {
                   (row) => ListTile(
                     contentPadding: EdgeInsets.zero,
                     title: Text(
-                      '${row['min_level']}+ · ${row['status']} · ${row['provider'] ?? 'chưa hoàn tất'}',
+                      '${row['min_level']}+ · ${row['status']}${row['status'] == 'complete' && row['error_text'] != null ? ' (thiếu phần)' : ''} · ${row['provider'] ?? 'chưa hoàn tất'}',
                     ),
                     subtitle: Text(
                       DateTime.fromMillisecondsSinceEpoch(

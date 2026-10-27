@@ -16,6 +16,13 @@ class ReviewedItem {
   final String? existingSenseId;
 }
 
+class PartialJob {
+  const PartialJob(this.id, this.done, this.result);
+  final String id;
+  final Set<int> done;
+  final PassageResult result;
+}
+
 class PassageRepository {
   PassageRepository(this.library);
   final LibraryRepository library;
@@ -23,7 +30,15 @@ class PassageRepository {
   final _uuid = const Uuid();
   Future<List<Map<String, Object?>>> history() => db.query(
     'passage_jobs',
-    columns: ['id', 'created_at', 'status', 'min_level', 'provider', 'model'],
+    columns: [
+      'id',
+      'created_at',
+      'status',
+      'min_level',
+      'provider',
+      'model',
+      'error_text',
+    ],
     orderBy: 'created_at DESC',
     limit: 30,
   );
@@ -32,23 +47,51 @@ class PassageRepository {
   Future<void> delete(String id) => db.transaction((tx) async {
     await tx.delete('passage_jobs', where: 'id=?', whereArgs: [id]);
   });
+  int get _cacheSince => library
+      .clock()
+      .toUtc()
+      .subtract(const Duration(days: 30))
+      .millisecondsSinceEpoch;
+
+  /// A complete job; a complete job with error_text is missing parts.
   Future<String?> cached(String key) async {
     final rows = await db.query(
       'passage_jobs',
       columns: ['id'],
-      where: "cache_key=? AND status='complete' AND created_at>=?",
-      whereArgs: [
-        key,
-        library
-            .clock()
-            .toUtc()
-            .subtract(const Duration(days: 30))
-            .millisecondsSinceEpoch,
-      ],
+      where: "cache_key=? AND status='complete' AND error_text IS NULL AND created_at>=?",
+      whereArgs: [key, _cacheSince],
       orderBy: 'created_at DESC',
       limit: 1,
     );
     return rows.firstOrNull?['id'] as String?;
+  }
+
+  /// Latest job with some parts done, to continue instead of paying again.
+  Future<PartialJob?> partial(String key, PassageRequest request) async {
+    final rows = await db.query(
+      'passage_jobs',
+      where: "cache_key=? AND status='complete' AND error_text IS NOT NULL AND created_at>=?",
+      whereArgs: [key, _cacheSince],
+      orderBy: 'created_at DESC',
+      limit: 1,
+    );
+    final row = rows.firstOrNull;
+    if (row == null) return null;
+    final parts = request.parts().length;
+    final done = <int>{
+      for (final a in jsonDecode(row['attempts_json'] as String) as List)
+        if (a is Map &&
+            a['status'] == 'success' &&
+            a['parts'] == parts &&
+            a['part'] is int)
+          (a['part'] as int) - 1,
+    };
+    final saved = validatePassageResult(row['result_json'] as String, request);
+    return PartialJob(
+      row['id'] as String,
+      done,
+      PassageResult(saved.items, row['removed'] as int, row['at_limit'] == 1),
+    );
   }
 
   Future<String> create(
@@ -92,6 +135,30 @@ class PassageRepository {
         'removed': response.result.removed,
         'at_limit': response.result.atLimit ? 1 : 0,
         'error_text': null,
+      },
+      where: 'id=?',
+      whereArgs: [id],
+    );
+  }
+
+  /// Saves whatever parts succeeded; [missing] explains the rest, if any.
+  Future<void> completeParts(
+    String id,
+    PartsExtraction response, {
+    String? missing,
+  }) async {
+    await db.update(
+      'passage_jobs',
+      {
+        'status': 'complete',
+        'result_json': response.result.json,
+        if (response.configuration != null) ...{
+          'provider': response.configuration!.provider.name,
+          'model': response.configuration!.model,
+        },
+        'removed': response.result.removed,
+        'at_limit': response.result.atLimit ? 1 : 0,
+        'error_text': missing,
       },
       where: 'id=?',
       whereArgs: [id],

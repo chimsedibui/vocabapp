@@ -115,11 +115,11 @@ void main() {
     'budgets reject long input and cache is NFC normalized/settings sensitive',
     () {
       expect(
-        () => PassageRequest('a' * 12001),
+        () => PassageRequest('a' * 100001),
         throwsA(isA<UserFacingException>()),
       );
       expect(
-        () => PassageRequest('a' * 5000).checkBudget(16384),
+        () => PassageRequest('a ' * 7000).checkBudget(16384),
         throwsA(isA<UserFacingException>()),
       );
       expect(
@@ -193,6 +193,37 @@ void main() {
       expect(calls, 1);
       expect(records.single['usage'], containsPair('prompt_tokens', 120));
       expect(jsonEncode(records), isNot(contains('test-secret')));
+    },
+  );
+  test(
+    'Gemini uses its OpenAI-compatible endpoint with Bearer and no store',
+    () async {
+      final service = PassageService(
+        clientFactory: () => MockClient((r) async {
+          expect(
+            r.url.toString(),
+            'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+          );
+          expect(r.headers['Authorization'], 'Bearer gemini-secret');
+          expect(r.headers.containsKey('api-key'), false);
+          final body = jsonDecode(r.body) as Map;
+          expect(body.containsKey('store'), false);
+          expect(body['model'], 'gemini-flash-latest');
+          return response();
+        }),
+      );
+      final result = await service.extract(
+        request,
+        const AiPreferences(
+          AiConfiguration(
+            provider: AiProvider.gemini,
+            key: 'gemini-secret',
+            model: 'gemini-flash-latest',
+          ),
+        ),
+        onAttempt: (_) async {},
+      );
+      expect(result.configuration.label, 'Google Gemini');
     },
   );
   test(
@@ -338,13 +369,134 @@ void main() {
     );
     await expectLater(
       service.extract(
-        PassageRequest('a' * 5000),
+        PassageRequest('a ' * 7000),
         const AiPreferences(config),
         onAttempt: (_) async {},
       ),
       throwsA(isA<UserFacingException>()),
     );
     expect(calls, 0);
+  });
+  group('long passages', () {
+    final paragraph = List.generate(
+      40,
+      (i) => 'Sentence $i keeps the persistent effort going.',
+    ).join(' ');
+    final long = List.filled(12, paragraph).join('\n\n');
+    test('splits at boundaries, within budget, keeping every word', () {
+      final parts = splitPassage(long);
+      expect(parts.length, greaterThan(1));
+      for (final p in parts) {
+        expect(utf8.encode(p).length, lessThanOrEqualTo(maxPartBytes));
+        expect(p, startsWith('Sentence'));
+        expect(p, endsWith('going.'));
+      }
+      expect(parts.join(' ').split(RegExp(r'\s+')), long.split(RegExp(r'\s+')));
+      final unbroken = splitPassage('x' * 7000);
+      expect(unbroken.map((p) => p.length), [6000, 1000]);
+      for (final p in PassageRequest(long).parts()) {
+        p.checkBudget(16384);
+      }
+    });
+    test('max items is shared so the merged result fits it', () {
+      expect(shareItems(30, [5, 5, 1]).fold(0, (a, b) => a + b), 30);
+      expect(shareItems(3, [100, 1, 1]), [1, 1, 1]);
+      expect(shareItems(10, [3, 1]), [7, 3]);
+      final request = PassageRequest(long, maxItems: 30);
+      expect(
+        request.parts().fold(0, (a, p) => a + p.maxItems),
+        request.maxItems,
+      );
+      expect(
+        () => PassageRequest(long, maxItems: 1).parts(),
+        throwsA(isA<UserFacingException>()),
+      );
+    });
+    test('each part is one request; duplicates across parts merge', () async {
+      final bodies = <String>[];
+      final records = <Map<String, Object?>>[];
+      final service = PassageService(
+        clientFactory: () => MockClient((r) async {
+          bodies.add(jsonDecode(r.body)['messages'][1]['content'] as String);
+          return response();
+        }),
+      );
+      final request = PassageRequest(long);
+      final parts = request.parts();
+      final result = await service.extractParts(
+        request,
+        const AiPreferences(config),
+        onAttempt: (a) async => records.add(a),
+      );
+      expect(bodies, parts.map((p) => p.text));
+      expect(result.complete, true);
+      expect(result.result.items.single.term, 'persistent');
+      expect(result.result.removed, parts.length - 1);
+      expect(records.map((r) => r['part']), [
+        for (var i = 1; i <= parts.length; i++) i,
+      ]);
+      expect(
+        validatePassageResult(result.result.json, request).items.length,
+        1,
+      );
+    });
+    test(
+      'a failed part keeps earlier parts; retry only calls the rest',
+      () async {
+        final request = PassageRequest(long);
+        final total = request.parts().length;
+        var calls = 0;
+        final failing = PassageService(
+          clientFactory: () => MockClient((r) async {
+            calls++;
+            return calls == 1 ? response() : http.Response('{}', 401);
+          }),
+        );
+        final first = await failing.extractParts(
+          request,
+          const AiPreferences(config),
+          onAttempt: (_) async {},
+        );
+        expect(calls, 2);
+        expect(first.done, {0});
+        expect(first.complete, false);
+        expect(first.error, isA<UserFacingException>());
+        var retries = 0;
+        final retry =
+            await PassageService(
+              clientFactory: () => MockClient((r) async {
+                retries++;
+                return response(content: '{"items":[]}');
+              }),
+            ).extractParts(
+              request,
+              const AiPreferences(config),
+              onAttempt: (_) async {},
+              done: first.done,
+              previous: first.result,
+            );
+        expect(retries, total - 1);
+        expect(retry.complete, true);
+        expect(retry.result.items.single.term, 'persistent');
+      },
+    );
+    test('refusal skips only that part', () async {
+      var calls = 0;
+      final result =
+          await PassageService(
+            clientFactory: () => MockClient((r) async {
+              calls++;
+              return calls == 1 ? response(refusal: 'no') : response();
+            }),
+          ).extractParts(
+            PassageRequest(long),
+            const AiPreferences(config),
+            onAttempt: (_) async {},
+          );
+      expect(result.done.contains(0), false);
+      expect(result.done.length, result.parts - 1);
+      expect(calls, result.parts);
+    });
   });
   group('persisted passage workflow', () {
     late Database db;
@@ -378,6 +530,44 @@ void main() {
       deck = (await library.decks()).single.id;
     });
     tearDown(() async => db.close());
+    test(
+      'partial jobs are not cache hits but resume their done parts',
+      () async {
+        final long = List.filled(
+          3,
+          List.filled(300, 'The persistent effort helped.').join(' '),
+        ).join('\n\n');
+        final request = PassageRequest(long);
+        const prefs = AiPreferences(config);
+        final key = request.cacheKey(prefs.identity);
+        final id = await repo.create(request, prefs);
+        final parts = request.parts().length;
+        await repo.attempt(id, {
+          'status': 'success',
+          'part': 2,
+          'parts': parts,
+        });
+        await repo.attempt(id, {'status': 'error', 'part': 3, 'parts': parts});
+        final result = validatePassageResult(output([item]), request);
+        await repo.completeParts(
+          id,
+          PartsExtraction(result, config, {1}, parts, null),
+          missing: 'Mới trích 1/$parts phần.',
+        );
+        expect(await repo.cached(key), isNull);
+        final partial = (await repo.partial(key, request))!;
+        expect(partial.id, id);
+        expect(partial.done, {1});
+        expect(partial.result.items.single.term, 'persistent');
+        expect(await repo.approve(id, deck, [const ReviewedItem(item)]), 1);
+        await repo.completeParts(
+          id,
+          PartsExtraction(result, null, {0, 1, 2}, parts, null),
+        );
+        expect(await repo.cached(key), id);
+        expect((await repo.job(id))['provider'], 'openai');
+      },
+    );
     test(
       'cache/history contain no keys; approving twice preserves reviewed cards',
       () async {
@@ -468,6 +658,60 @@ void main() {
       expect(await repo.history(), isEmpty);
       expect((await library.vocabulary()).length, 1);
     });
+    testWidgets('long passage keeps done parts and continues only the rest', (
+      tester,
+    ) async {
+      await const AiConfigurationStore().save(const AiPreferences(config));
+      final long = List.filled(
+        3,
+        List.filled(300, 'The persistent effort helped.').join(' '),
+      ).join('\n\n');
+      final parts = PassageRequest(long).parts().length;
+      var calls = 0;
+      var fail = true;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PassagePage(
+            library: library,
+            serviceFactory: () => PassageService(
+              clientFactory: () => MockClient((_) async {
+                calls++;
+                if (fail && calls > 1) return http.Response('{}', 401);
+                return response();
+              }),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Passage tiếng Anh'),
+        long,
+      );
+      FocusManager.instance.primaryFocus?.unfocus();
+      tester.testTextInput.hide();
+      await tester.pumpAndSettle();
+      final scroll = tester
+          .state<ScrollableState>(find.byType(Scrollable).first)
+          .position;
+      scroll.jumpTo(scroll.maxScrollExtent);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Chia thành $parts phần'), findsOneWidget);
+      await tester.tap(find.text('Trích từ (ưu tiên cache)'));
+      await tester.pumpAndSettle();
+      expect(calls, 2);
+      expect(find.textContaining('Mới trích 1/$parts phần'), findsOneWidget);
+      fail = false;
+      await tester.ensureVisible(find.text('Trích tiếp phần còn lại'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Trích tiếp phần còn lại'));
+      await tester.pumpAndSettle();
+      expect(calls, 2 + parts - 1);
+      expect(find.text('Trích tiếp phần còn lại'), findsNothing);
+      expect((await repo.history()).length, 1);
+      expect((await repo.history()).single['error_text'], isNull);
+      await tester.pumpWidget(const SizedBox());
+    });
     testWidgets('overlong paste is preserved and blocked before an API call', (
       tester,
     ) async {
@@ -488,8 +732,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       final field = find.widgetWithText(TextField, 'Passage tiếng Anh');
-      await tester.enterText(field, 'a' * 12001);
-      expect(tester.widget<TextField>(field).controller!.text.length, 12001);
+      await tester.enterText(field, 'a' * 100001);
+      expect(tester.widget<TextField>(field).controller!.text.length, 100001);
       FocusManager.instance.primaryFocus?.unfocus();
       tester.testTextInput.hide();
       await tester.pumpAndSettle();
@@ -502,7 +746,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(calls, 0);
       expect(await repo.history(), isEmpty);
-      expect(find.textContaining('Cần passage 1–12.000 ký tự'), findsOneWidget);
+      expect(find.textContaining('Cần passage 1–100.000 ký tự'), findsWidgets);
       await tester.pumpWidget(const SizedBox());
     });
     testWidgets(

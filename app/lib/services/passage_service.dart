@@ -56,7 +56,28 @@ class ExtractionResponse {
   final AiConfiguration configuration;
 }
 
-/// One user action, at most three HTTP requests, no tools or hidden enrichment.
+class PartsExtraction {
+  const PartsExtraction(
+    this.result,
+    this.configuration,
+    this.done,
+    this.parts,
+    this.error,
+  );
+  final PassageResult result;
+
+  /// Service of the first part answered in this run; null if none was.
+  final AiConfiguration? configuration;
+
+  /// Zero-based indexes of parts with a validated result, earlier runs included.
+  final Set<int> done;
+  final int parts;
+  final UserFacingException? error;
+  bool get complete => done.length == parts;
+}
+
+/// One request per part, at most three HTTP requests each, no tools or hidden
+/// enrichment.
 class PassageService {
   PassageService({http.Client Function()? clientFactory})
     : _factory = clientFactory ?? http.Client.new;
@@ -70,6 +91,55 @@ class PassageService {
 
   void _check() {
     if (_cancelled) throw const PassageCancelled();
+  }
+
+  /// Parts in [done] are skipped and [previous] is merged in, so a retry only
+  /// pays for missing parts. A part-specific refusal or truncation moves on;
+  /// any other failure stops, since later parts would likely fail the same way.
+  Future<PartsExtraction> extractParts(
+    PassageRequest request,
+    AiPreferences preferences, {
+    required Future<void> Function(Map<String, Object?>) onAttempt,
+    Set<int> done = const {},
+    PassageResult? previous,
+    void Function(int done, int total)? onProgress,
+  }) async {
+    final parts = request.parts();
+    for (final part in parts) {
+      part.checkBudget(preferences.primary.contextWindow);
+      if (preferences.fallback != null) {
+        part.checkBudget(preferences.fallback!.contextWindow);
+      }
+    }
+    final finished = {...done};
+    final results = [?previous];
+    AiConfiguration? used;
+    UserFacingException? error;
+    for (var i = 0; i < parts.length; i++) {
+      if (finished.contains(i)) continue;
+      onProgress?.call(finished.length, parts.length);
+      try {
+        final response = await extract(
+          parts[i],
+          preferences,
+          onAttempt: (a) =>
+              onAttempt({...a, 'part': i + 1, 'parts': parts.length}),
+        );
+        results.add(response.result);
+        used ??= response.configuration;
+        finished.add(i);
+      } on UserFacingException catch (e) {
+        error = e;
+        if (e is! _Refusal && e is! _Incomplete) break;
+      }
+    }
+    return PartsExtraction(
+      mergePassageResults(results),
+      used,
+      finished,
+      parts.length,
+      error,
+    );
   }
 
   Future<ExtractionResponse> extract(
@@ -186,14 +256,15 @@ class PassageService {
       ..followRedirects = false
       ..headers.addAll({
         'Content-Type': 'application/json',
-        if (config.provider == AiProvider.openai)
-          'Authorization': 'Bearer ${config.key}'
+        if (config.provider == AiProvider.azure)
+          'api-key': config.key
         else
-          'api-key': config.key,
+          'Authorization': 'Bearer ${config.key}',
       })
       ..body = jsonEncode({
         'model': config.model,
-        'store': false,
+        // Gemini's OpenAI-compatible endpoint rejects unknown fields like store.
+        if (config.provider != AiProvider.gemini) 'store': false,
         'max_completion_tokens': 2500,
         'messages': [
           {'role': 'system', 'content': request.instruction},

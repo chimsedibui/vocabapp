@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:sqflite_common/sqlite_api.dart';
 
 import '../domain/models.dart';
+import '../domain/passage.dart';
 import '../data/ids.dart';
 
 class BackupSummary {
@@ -156,7 +157,9 @@ class BackupService {
                   (value is! String ||
                       value.length >
                           (table == 'passage_jobs'
-                              ? (col['name'] == 'source_text' ? 12000 : 100000)
+                              ? (col['name'] == 'source_text'
+                                    ? maxPassageChars
+                                    : 100000)
                               : 4096))) ||
               (value != null && col['type'] == 'INTEGER' && value is! int)) {
             throw const UserFacingException(

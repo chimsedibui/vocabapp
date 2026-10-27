@@ -4,7 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../domain/models.dart';
 
-enum AiProvider { openai, azure }
+enum AiProvider { openai, azure, gemini }
 
 class AiConfiguration {
   const AiConfiguration({
@@ -19,10 +19,20 @@ class AiConfiguration {
   final String key, model, endpoint;
   final bool structured;
   final int contextWindow;
-  String get label => provider == AiProvider.openai ? 'OpenAI' : 'Azure OpenAI';
+  String get label => switch (provider) {
+    AiProvider.openai => 'OpenAI',
+    AiProvider.azure => 'Azure OpenAI',
+    AiProvider.gemini => 'Google Gemini',
+  };
   Uri get uri {
     if (provider == AiProvider.openai) {
       return Uri.https('api.openai.com', '/v1/chat/completions');
+    }
+    if (provider == AiProvider.gemini) {
+      return Uri.https(
+        'generativelanguage.googleapis.com',
+        '/v1beta/openai/chat/completions',
+      );
     }
     final root = Uri.tryParse(endpoint);
     if (root == null ||

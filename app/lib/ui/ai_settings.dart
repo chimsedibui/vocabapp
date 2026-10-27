@@ -12,7 +12,7 @@ class AiSettings extends StatelessWidget {
       leading: const Icon(Icons.key_outlined),
       title: const Text('API trích từ vựng'),
       subtitle: const Text(
-        'OpenAI / Azure OpenAI · key lưu riêng trên thiết bị',
+        'OpenAI / Azure OpenAI / Gemini · key lưu riêng trên thiết bị',
       ),
       trailing: const Icon(Icons.chevron_right),
       onTap: () => Navigator.push(
@@ -151,6 +151,10 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
                 value: AiProvider.azure,
                 child: Text('Azure OpenAI (API v1)'),
               ),
+              DropdownMenuItem(
+                value: AiProvider.gemini,
+                child: Text('Google Gemini'),
+              ),
             ],
             onChanged: _busy
                 ? null
@@ -174,6 +178,9 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
               labelText: fields.provider == AiProvider.azure
                   ? 'Tên deployment'
                   : 'Tên model',
+              hintText: fields.provider == AiProvider.gemini
+                  ? 'gemini-flash-latest'
+                  : null,
               helperText: 'Dùng model hỗ trợ Chat Completions và JSON; đối chiếu quyền trong tài khoản.',
             ),
             maxLength: 200,
