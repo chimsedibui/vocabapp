@@ -53,3 +53,10 @@ Enrichment từng từ/Google dịch dự phòng, nhập CSV/JSON/XLSX, Parquet 
 ## Backup ở bản 0.3
 
 DB/backup version 2 thêm `passage_jobs` và `sense_origins` (9 bảng); vẫn đọc backup version 1 bằng cách bổ sung hai bảng mới rỗng. Migration từ DB 1 sang 2 giữ thư viện/lịch ôn. Backup có nguyên passage, kết quả JSON, usage và provenance; không có cấu hình/API key trong secure storage. Bản 0.2 từ chối DB/backup 2, nên không chạy lại app cũ trên DB đã nâng cấp. Preview restore hiển thị số passage. Giới hạn file vẫn 20 MiB.
+
+## An toàn dữ liệu khi cập nhật (DB v5, backup v4)
+
+- Thư viện nằm trong thư mục dữ liệu app (Windows `%APPDATA%\dev.vocabapp\VocabApp`, Android dữ liệu riêng của app), không nằm trong thư mục cài đặt; cài đè Setup/ZIP/APK cùng chữ ký không đụng tới. Gỡ app Android xóa dữ liệu (auto backup tắt); APK debug ký khác nên không cài đè lên bản release.
+- Snapshot: lần đầu một phiên bản app mới mở thư viện (trước mọi migration), app chép `vocabulary.db` (+ `-wal/-shm/-journal` nếu có) vào `snapshots/vocabulary-before-<version>-<UTC>.db`, giữ 5 bản mới nhất. Lỗi chép không chặn mở app. Cài đặt → Sao lưu → "Bản tự lưu trước khi cập nhật" → Khôi phục: mở một bản sao tạm, migrate như DB thật, xuất thành backup rồi đi qua `BackupService.restore` (kiểm tra đầy đủ, giữ file recovery).
+- SCD Type 2 cho nghĩa: trigger SQLite ghi phiên bản cũ của `senses` vào `sense_history` (meaning, part_of_speech, pronunciation, note, status, content_revision, `valid_from`/`valid_to` ms UTC, `change` update/delete) mỗi khi các trường đó đổi hoặc nghĩa bị xóa; dòng trong `senses` là phiên bản hiện hành. Áp dữ liệu sync không ghi (máy sửa đã ghi và đồng bộ), trừ khi một sửa đổi local chưa đồng bộ bị bản mới hơn thắng: bản thua được giữ làm một phiên bản. Restore đặt `history_off` nên không sinh phiên bản giả. Form sửa từ → Lịch sử → "Dùng lại" áp phiên bản cũ như một lần sửa mới (cũng được lưu lịch sử).
+- `sense_history` được sync và nằm trong backup v4; backup v1–v3 vẫn khôi phục được (lịch sử rỗng). App cũ nhận dòng `sense_history` từ sync sẽ báo cần cập nhật, như mọi bảng mới.

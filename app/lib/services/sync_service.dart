@@ -6,6 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:sqflite_common/sqlite_api.dart';
 import 'package:sqflite_common/utils/utils.dart' as sql_utils;
+import 'package:uuid/uuid.dart';
 
 import '../data/database.dart';
 import '../domain/models.dart';
@@ -298,6 +299,23 @@ class SyncService extends ChangeNotifier {
       return false;
     }
     final where = keys.map((k) => '$k=?').join(' AND ');
+    if (table == 'senses' && local.isNotEmpty) {
+      // A concurrent local edit loses; keep it as a history version.
+      final id = const Uuid().v4().replaceAll('-', '');
+      await tx.rawInsert(keepLosingSenseSql, [id, ...values]);
+      // rawInsert reports a row id, not whether a row was copied.
+      if ((await tx.query(
+        'sense_history',
+        where: 'id=?',
+        whereArgs: [id],
+      )).isNotEmpty) {
+        await tx.insert('sync_outbox', {
+          'tbl': 'sense_history',
+          'pk': id,
+          'changed_at': DateTime.now().toUtc().millisecondsSinceEpoch,
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+    }
     if (row['x'] == 1) {
       await tx.delete(table, where: where, whereArgs: values);
     } else {

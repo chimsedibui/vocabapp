@@ -8,7 +8,9 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../data/database.dart';
 import '../data/library_repository.dart';
+import '../data/snapshots.dart';
 import '../domain/models.dart';
 import '../services/backup_service.dart';
 import '../services/release_service.dart';
@@ -32,10 +34,38 @@ class _DataSettingsState extends State<DataSettings> {
   String? _message;
   bool _busy = false;
   AppRelease? _release;
+  DatabaseSnapshots? _snapshots;
+  List<File> _snapshotFiles = [];
   @override
   void initState() {
     super.initState();
     _loadVersion();
+    _loadSnapshots();
+  }
+
+  Future<void> _loadSnapshots() async {
+    try {
+      final snapshots = DatabaseSnapshots(
+        await getApplicationSupportDirectory(),
+      );
+      final files = await snapshots.list();
+      if (mounted) {
+        setState(() {
+          _snapshots = snapshots;
+          _snapshotFiles = files;
+        });
+      }
+    } catch (_) {
+      /* Widget tests have no support directory. */
+    }
+  }
+
+  Future<String?> _restoreSnapshot(File file) async {
+    final bytes = await _snapshots!.exportBackup(file, appDatabaseFactory);
+    return _confirmRestore(
+      bytes,
+      'Bản tự lưu trước khi cập nhật lên ${DatabaseSnapshots.version(file)}',
+    );
   }
 
   Future<void> _loadVersion() async {
@@ -96,7 +126,10 @@ class _DataSettingsState extends State<DataSettings> {
       }
       builder.add(chunk);
     }
-    final bytes = builder.takeBytes();
+    return _confirmRestore(builder.takeBytes(), 'Bản sao');
+  }
+
+  Future<String?> _confirmRestore(Uint8List bytes, String source) async {
     final service = BackupService(widget.repository.db);
     final summary = service.inspect(bytes);
     if (!mounted) return null;
@@ -105,7 +138,7 @@ class _DataSettingsState extends State<DataSettings> {
       builder: (context) => AlertDialog(
         title: const Text('Thay thế toàn bộ thư viện?'),
         content: Text(
-          'Bản sao có ${summary.entries} từ, ${summary.senses} nghĩa và ${summary.reviews} lượt ôn, ${summary.passages} passage (có văn bản nguồn).\n\nThư viện hiện tại sẽ được thay thế. App giữ thêm một bản phục hồi trên thiết bị trước khi khôi phục.',
+          '$source có ${summary.entries} từ, ${summary.senses} nghĩa và ${summary.reviews} lượt ôn, ${summary.passages} passage (có văn bản nguồn).\n\nThư viện hiện tại sẽ được thay thế. App giữ thêm một bản phục hồi trên thiết bị trước khi khôi phục.',
         ),
         actions: [
           TextButton(
@@ -185,6 +218,40 @@ class _DataSettingsState extends State<DataSettings> {
                   ),
                 ],
               ),
+              const SizedBox(height: 20),
+              const Text(
+                'Bản tự lưu trước khi cập nhật',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Mỗi lần mở phiên bản mới, app tự chép thư viện trước khi nâng cấp dữ liệu. Giữ 5 bản gần nhất trên thiết bị.',
+              ),
+              if (_snapshotFiles.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text('Chưa có bản nào.'),
+                ),
+              for (final file in _snapshotFiles)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  leading: const Icon(Icons.history),
+                  title: Text('Trước bản ${DatabaseSnapshots.version(file)}'),
+                  subtitle: Text(
+                    DatabaseSnapshots.takenAt(file)
+                            ?.toLocal()
+                            .toString()
+                            .substring(0, 16) ??
+                        '',
+                  ),
+                  trailing: TextButton(
+                    onPressed: _busy
+                        ? null
+                        : () => _run(() => _restoreSnapshot(file)),
+                    child: const Text('Khôi phục'),
+                  ),
+                ),
             ],
           ),
         ),

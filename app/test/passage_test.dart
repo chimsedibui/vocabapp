@@ -738,6 +738,7 @@ void main() {
       root['data'].remove('passage_jobs');
       root['data'].remove('sense_origins');
       root['data'].remove('import_batches');
+      root['data'].remove('sense_history');
       for (final row in root['data']['senses']) {
         for (final field in ['part_of_speech', 'pronunciation', 'note']) {
           row.remove(field);
@@ -947,7 +948,7 @@ void main() {
       path,
     );
     try {
-      expect(await upgraded.getVersion(), 4);
+      expect(await upgraded.getVersion(), 5);
       expect(await upgraded.query('cards'), cards);
       expect((await upgraded.query('review_events')).single['id'], 'persisted');
       expect(await upgraded.query('passage_jobs'), isEmpty);

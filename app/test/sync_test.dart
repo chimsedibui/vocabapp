@@ -206,11 +206,17 @@ void main() {
     // b pulls a's older edit first, keeps its own newer one, then pushes it.
     await b.sync.runOnce(FakeSyncServer.config);
     await a.sync.runOnce(FakeSyncServer.config);
+    // a's history rows (its replaced original and its losing edit) reach b.
+    await b.sync.runOnce(FakeSyncServer.config);
     await expectSameLibrary();
     expect(
       (await a.db.query('senses')).single['meaning'],
       'ngân hàng (tài chính)',
     );
+    final history = (await a.db.query('sense_history'))
+        .map((r) => r['meaning'])
+        .toSet();
+    expect(history, {'ngân hàng', 'bờ sông'});
   });
 
   test('deletes replicate as tombstones', () async {

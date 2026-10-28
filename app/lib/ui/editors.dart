@@ -121,6 +121,80 @@ class _WordEditorState extends State<WordEditor> {
     }
   }
 
+  String _date(DateTime? t) {
+    if (t == null) return 'lúc tạo';
+    final l = t.toLocal();
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${two(l.day)}/${two(l.month)}/${l.year} ${two(l.hour)}:${two(l.minute)}';
+  }
+
+  Future<void> _history() async {
+    final word = widget.word!;
+    List<SenseVersion> versions;
+    try {
+      versions = await widget.repository.history(word.senseId);
+    } catch (e) {
+      setState(() => _error = friendlyError(e));
+      return;
+    }
+    if (!mounted) return;
+    final chosen = await showDialog<SenseVersion>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('Lịch sử · ${word.term}'),
+        content: SizedBox(
+          width: 480,
+          child: versions.isEmpty
+              ? const Text('Chưa có lần sửa nào.')
+              : ListView(
+                  shrinkWrap: true,
+                  children: [
+                    for (final v in versions)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(v.meaning.isEmpty ? '(trống)' : v.meaning),
+                        subtitle: Text(
+                          [
+                            '${_date(v.validFrom)} → ${_date(v.validTo)}',
+                            if (partsOfSpeech[v.partOfSpeech] != null)
+                              partsOfSpeech[v.partOfSpeech]!,
+                            if (v.pronunciation != null) '/${v.pronunciation}/',
+                            if (v.status == 'draft') 'nháp',
+                          ].join(' · '),
+                        ),
+                        trailing: TextButton(
+                          onPressed: v.meaning.isEmpty
+                              ? null
+                              : () => Navigator.pop(c, v),
+                          child: const Text('Dùng lại'),
+                        ),
+                      ),
+                  ],
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('Đóng'),
+          ),
+        ],
+      ),
+    );
+    if (chosen == null || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      await widget.repository.restoreVersion(word.senseId, chosen);
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = friendlyError(e);
+          _busy = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) => PopScope(
     canPop: !_busy,
@@ -249,6 +323,12 @@ class _WordEditorState extends State<WordEditor> {
         ),
       ),
       actions: [
+        if (widget.word != null)
+          TextButton.icon(
+            onPressed: _busy ? null : _history,
+            icon: const Icon(Icons.history),
+            label: const Text('Lịch sử'),
+          ),
         TextButton(
           onPressed: _busy ? null : () => Navigator.pop(context),
           child: const Text('Hủy'),
