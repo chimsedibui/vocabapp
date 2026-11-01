@@ -840,6 +840,62 @@ void main() {
       expect((await repo.history()).single['error_text'], isNull);
       await tester.pumpWidget(const SizedBox());
     });
+    testWidgets('a running API call shows progress and elapsed time', (
+      tester,
+    ) async {
+      await const AiConfigurationStore().save(const AiPreferences(config));
+      final reply = Completer<http.Response>();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PassagePage(
+            library: library,
+            serviceFactory: () => PassageService(
+              clientFactory: () => MockClient((_) => reply.future),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Passage tiếng Anh'),
+        request.text,
+      );
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Trích từ (ưu tiên cache)'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Trích từ (ưu tiên cache)'));
+      for (
+        var i = 0;
+        i < 50 && find.byType(LinearProgressIndicator).evaluate().isEmpty;
+        i++
+      ) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump();
+      }
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(find.textContaining('đang xử lý…'), findsOneWidget);
+      reply.complete(response());
+      for (
+        var i = 0;
+        i < 50 && find.byType(LinearProgressIndicator).evaluate().isNotEmpty;
+        i++
+      ) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump();
+      }
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(find.textContaining('mục ·'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
     testWidgets('overlong paste is preserved and blocked before an API call', (
       tester,
     ) async {

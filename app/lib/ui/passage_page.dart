@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -63,6 +64,9 @@ class _PassagePageState extends State<PassagePage> {
   bool _busy = true, _loadedResult = false, _atLimit = false, _partial = false;
   int _removed = 0;
   String? _progress;
+  (int, int)? _parts;
+  final _clock = Stopwatch();
+  Timer? _ticker;
   String? _resultLabel;
   @override
   void initState() {
@@ -92,6 +96,7 @@ class _PassagePageState extends State<PassagePage> {
 
   @override
   void dispose() {
+    _ticker?.cancel();
     _service?.cancel();
     _text.dispose();
     _max.dispose();
@@ -215,9 +220,16 @@ class _PassagePageState extends State<PassagePage> {
       if (!mounted) {
         throw const PassageCancelled();
       }
-      setState(
-        () => _service = widget.serviceFactory?.call() ?? PassageService(),
-      );
+      setState(() {
+        _service = widget.serviceFactory?.call() ?? PassageService();
+        _clock
+          ..reset()
+          ..start();
+        _ticker = Timer.periodic(
+          const Duration(seconds: 1),
+          (_) => mounted ? setState(() {}) : null,
+        );
+      });
       final response = await _service!.extractParts(
         request,
         prefs,
@@ -226,7 +238,10 @@ class _PassagePageState extends State<PassagePage> {
         previous: partial?.result,
         onProgress: (done, total) {
           if (mounted && total > 1) {
-            setState(() => _progress = 'Đang trích phần ${done + 1}/$total…');
+            setState(() {
+              _progress = 'Đang trích phần ${done + 1}/$total…';
+              _parts = (done, total);
+            });
           }
         },
       );
@@ -259,6 +274,9 @@ class _PassagePageState extends State<PassagePage> {
     } finally {
       _service = null;
       _progress = null;
+      _parts = null;
+      _ticker?.cancel();
+      _clock.stop();
       if (mounted) {
         try {
           final history = await _repo.history();
@@ -419,6 +437,30 @@ class _PassagePageState extends State<PassagePage> {
     }
   }
 
+  /// Shown while an API call runs: a bar (per part when split), the model and
+  /// elapsed time, so a slow reasoning model does not look frozen.
+  Widget _waiting() {
+    final seconds = _clock.elapsed.inSeconds;
+    final model = _preferences?.primary.model ?? '';
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          LinearProgressIndicator(
+            value: _parts == null ? null : _parts!.$1 / _parts!.$2,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${_progress ?? 'Đang trích từ'} · $model đang xử lý… ${seconds}s'
+            '${seconds >= 20 ? ' · model có suy luận có thể mất 30–90s' : ''}',
+            style: TextStyle(color: Theme.of(context).colorScheme.outline),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _cell(Widget child) =>
       Padding(padding: const EdgeInsets.all(6), child: child);
 
@@ -436,12 +478,11 @@ class _PassagePageState extends State<PassagePage> {
       child: Table(
         columnWidths: const {
           0: FixedColumnWidth(44),
-          1: FixedColumnWidth(140),
-          2: FixedColumnWidth(84),
-          3: FixedColumnWidth(120),
-          4: FixedColumnWidth(80),
-          5: FixedColumnWidth(260),
-          6: FixedColumnWidth(220),
+          1: FixedColumnWidth(180),
+          2: FixedColumnWidth(120),
+          3: FixedColumnWidth(80),
+          4: FixedColumnWidth(260),
+          5: FixedColumnWidth(220),
         },
         defaultVerticalAlignment: TableCellVerticalAlignment.middle,
         border: TableBorder(
@@ -465,7 +506,6 @@ class _PassagePageState extends State<PassagePage> {
                       }),
               ),
               _head('Từ'),
-              _head('Từ loại'),
               _head('IPA'),
               _head('CEFR'),
               _head('Nghĩa (sửa được)'),
@@ -487,9 +527,23 @@ class _PassagePageState extends State<PassagePage> {
           onChanged: _busy ? null : (v) => setState(() => p.selected = v!),
         ),
         _cell(
-          Text(p.term, style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text.rich(
+            TextSpan(
+              text: p.term,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+              children: [
+                if (partOfSpeechAbbreviations[p.partOfSpeech] case final pos?)
+                  TextSpan(
+                    text: ' ($pos)',
+                    style: muted.copyWith(
+                      fontWeight: FontWeight.normal,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ),
-        _cell(Text(partsOfSpeech[p.partOfSpeech] ?? '—', style: muted)),
         _cell(
           Text(
             p.pronunciation == null ? '—' : '/${p.pronunciation}/',
@@ -666,7 +720,12 @@ class _PassagePageState extends State<PassagePage> {
                       onPressed: _busy || _preferences == null
                           ? null
                           : () => _extract(),
-                      icon: const Icon(Icons.auto_awesome_outlined),
+                      icon: _service != null
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.auto_awesome_outlined),
                       label: Text(
                         _busy
                             ? _progress ?? 'Đang xử lý…'
@@ -695,6 +754,7 @@ class _PassagePageState extends State<PassagePage> {
                     ],
                   ],
                 ),
+                if (_service != null) _waiting(),
                 if (_error != null)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 16),
