@@ -191,9 +191,7 @@ PassageResult mergePassageResults(List<PassageResult> results) {
   for (final result in results) {
     removed += result.removed;
     for (final item in result.items) {
-      if (seen.add(
-        '${item.term.toLowerCase()}\u0000${item.meaning.toLowerCase()}',
-      )) {
+      if (seen.add('${termKey(item.term)}\u0000${meaningKey(item.meaning)}')) {
         kept.add(item);
       } else {
         removed++;
@@ -236,7 +234,7 @@ PassageResult validatePassageResult(String json, PassageRequest request) {
         '(?<![\\p{L}\\p{N}_’\u0027-])${RegExp.escape(term.toLowerCase())}(?![\\p{L}\\p{N}_’\u0027-])',
         unicode: true,
       );
-      final key = '${term.toLowerCase()}\u0000${meaning.toLowerCase()}';
+      final key = '${termKey(term)}\u0000${meaningKey(meaning)}';
       if (cefrLevels.indexOf(row['level'] as String) >=
               cefrLevels.indexOf(request.minLevel) &&
           pattern.hasMatch(source) &&

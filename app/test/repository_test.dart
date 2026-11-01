@@ -100,18 +100,53 @@ void main() {
       final card = (await repo.studyQueue()).single;
       await repo.review(card, Rating.good, 'event-1');
       final other = await repo.createDeck('Khác');
+      await repo.addWord(
+        term: 'retain',
+        meaning: 'tài chính',
+        deckId: deck,
+        senseKey: 'finance',
+      );
       await expectLater(
-        repo.addWord(term: 'retain', meaning: 'conflicting', deckId: other),
+        repo.addWord(
+          term: 'retain',
+          meaning: 'conflicting',
+          deckId: other,
+          senseKey: 'finance',
+        ),
         throwsA(isA<UserFacingException>()),
       );
       expect((await repo.vocabulary(deckId: other)), isEmpty);
-      final word = (await repo.vocabulary()).single;
+      final word = (await repo.vocabulary()).first;
       await repo.removeFromDeck(word.entryId, deck);
-      expect((await repo.vocabulary()).length, 1);
+      expect((await repo.vocabulary()).length, 2);
       expect((await db.query('review_events')).length, 1);
-      expect((await db.query('cards')).single['state'], 'review');
+      expect((await db.query('cards', where: "state='review'")).length, 1);
     },
   );
+
+  test('same word is reused across case and near-identical meanings', () async {
+    expect(
+      await repo.addWord(term: 'Tea', meaning: 'Trà.', deckId: deck),
+      true,
+    );
+    expect(
+      await repo.addWord(term: 'tea', meaning: 'trà', deckId: deck),
+      false,
+    );
+    expect(
+      await repo.addWord(term: 'tea', meaning: 'bữa trà chiều', deckId: deck),
+      true,
+    );
+    expect((await db.query('entries')).length, 1);
+    expect(
+      (await db.query('senses')).map((r) => r['sense_key']),
+      unorderedEquals(['primary', 'primary-2']),
+    );
+    await repo.addWord(term: 'US', meaning: 'nước Mỹ', deckId: deck);
+    await repo.addWord(term: 'us', meaning: 'chúng tôi', deckId: deck);
+    expect((await db.query('entries')).length, 3);
+    expect((await repo.matches('us')).map((v) => v.term).toSet(), {'US', 'us'});
+  });
 
   test(
     'bulk draft all-or-nothing, duplicates skipped, approval required',

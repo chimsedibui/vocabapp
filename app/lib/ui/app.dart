@@ -289,7 +289,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       await _addDeck();
       return;
     }
-    final result = await showDialog<bool>(
+    final result = await showDialog<String>(
       context: context,
       barrierDismissible: false,
       builder: (_) => WordEditor(
@@ -299,10 +299,10 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         initialDeck: _deck,
       ),
     );
-    if (result == true) {
+    if (result != null) {
       widget.sync?.requestSync();
       _refresh();
-      _message('Đã lưu vào thư viện.');
+      _message(result);
     }
   }
 
