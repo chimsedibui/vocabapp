@@ -33,6 +33,20 @@ const partsOfSpeech = {
   'other': 'khác',
 };
 
+/// Short labels shown right after a term, e.g. "conducive (adj)".
+const partOfSpeechAbbreviations = {
+  'noun': 'n',
+  'verb': 'v',
+  'adjective': 'adj',
+  'adverb': 'adv',
+  'pronoun': 'pron',
+  'preposition': 'prep',
+  'conjunction': 'conj',
+  'interjection': 'interj',
+  'determiner': 'det',
+  'phrase': 'phr',
+};
+
 /// IPA without the surrounding slashes or brackets; empty becomes null.
 String? normalizePronunciation(String? value) {
   if (value == null) return null;
