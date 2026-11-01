@@ -18,7 +18,7 @@ class ReviewPage extends StatefulWidget {
 }
 
 class _ReviewPageState extends State<ReviewPage> {
-  late final _queue = widget.repository.studyQueue(deckId: widget.deckId);
+  late var _queue = widget.repository.studyQueue(deckId: widget.deckId);
   int _index = 0;
   bool _revealed = false, _saving = false;
   String _eventId = const Uuid().v4();
@@ -98,9 +98,26 @@ class _ReviewPageState extends State<ReviewPage> {
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 24),
-                    FilledButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Về hôm nay'),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      alignment: WrapAlignment.center,
+                      children: [
+                        if (cards.isNotEmpty)
+                          FilledButton(
+                            onPressed: () => setState(() {
+                              _queue = widget.repository.studyQueue(
+                                deckId: widget.deckId,
+                              );
+                              _index = 0;
+                            }),
+                            child: const Text('Học tiếp'),
+                          ),
+                        OutlinedButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Về hôm nay'),
+                        ),
+                      ],
                     ),
                   ],
                 ),

@@ -133,10 +133,9 @@ class StudyStats {
     required this.drafts,
     required this.due,
     required this.fresh,
-    required this.newRemaining,
     required this.reviewedToday,
     required this.nextDue,
   });
-  final int entries, senses, drafts, due, fresh, newRemaining, reviewedToday;
+  final int entries, senses, drafts, due, fresh, reviewedToday;
   final DateTime? nextDue;
 }

@@ -19,13 +19,6 @@ class LibraryRepository {
   Future<Map<String, Object?>> settings() async =>
       (await db.query('settings')).single;
 
-  Future<void> setDailyLimit(int value) async {
-    if (value < 0 || value > 100) {
-      throw const UserFacingException('Số từ mới mỗi ngày phải từ 0 đến 100.');
-    }
-    await db.update('settings', {'daily_new_limit': value}, where: 'id = 1');
-  }
-
   String _studyDay(DateTime now, String timezone) {
     final local = tz.TZDateTime.from(now, tz.getLocation(timezone));
     return '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')}';
@@ -483,13 +476,6 @@ class LibraryRepository {
         .toList();
   }
 
-  Future<int> _newUsed(DatabaseExecutor tx, String day) async =>
-      (await tx.rawQuery(
-            'SELECT count(*) n FROM review_events WHERE study_day=? AND was_new=1',
-            [day],
-          )).single['n']
-          as int;
-
   Future<StudyStats> stats() => db.transaction((tx) async {
     final config = (await tx.query('settings')).single;
     final now = clock().toUtc();
@@ -511,10 +497,6 @@ class LibraryRepository {
       drafts: counts['drafts'] as int,
       due: counts['due'] as int,
       fresh: counts['fresh'] as int,
-      newRemaining: max(
-        0,
-        (config['daily_new_limit'] as int) - await _newUsed(tx, day),
-      ),
       reviewedToday: counts['reviews'] as int,
       nextDue: counts['next_due'] == null
           ? null
@@ -525,17 +507,14 @@ class LibraryRepository {
     );
   });
 
+  /// Due cards first, then new cards, [limit] per session. New cards have no
+  /// daily cap; `settings.daily_new_limit` stays only for schema/backup
+  /// compatibility.
   Future<List<StudyCard>> studyQueue({
     String? deckId,
     int limit = 20,
   }) => db.transaction((tx) async {
     final now = clock().toUtc();
-    final config = (await tx.query('settings')).single;
-    final remaining = max(
-      0,
-      (config['daily_new_limit'] as int) -
-          await _newUsed(tx, _studyDay(now, config['timezone'] as String)),
-    );
     final group = deckId == null
         ? ''
         : 'AND EXISTS(SELECT 1 FROM deck_entries de WHERE de.entry_id=e.id AND de.deck_id=?)';
@@ -550,7 +529,7 @@ class LibraryRepository {
     );
     final fresh = await tx.rawQuery(
       '$base AND c.state=? $group ORDER BY e.created_at,c.id LIMIT ?',
-      ['new', ?deckId, min(remaining, max(0, limit - due.length))],
+      ['new', ?deckId, max(0, limit - due.length)],
     );
     return [...due, ...fresh]
         .map(
@@ -605,12 +584,6 @@ class LibraryRepository {
         final now = clock().toUtc();
         final config = (await tx.query('settings')).single;
         final day = _studyDay(now, config['timezone'] as String);
-        if (card['state'] == 'new' &&
-            await _newUsed(tx, day) >= (config['daily_new_limit'] as int)) {
-          throw const UserFacingException(
-            'Đã đủ từ mới hôm nay. Bạn vẫn có thể ôn các thẻ đến hạn.',
-          );
-        }
         if (card['state'] != 'new' &&
             (card['due_at'] as int) > now.millisecondsSinceEpoch) {
           throw const UserFacingException('Thẻ này chưa đến hạn ôn.');
