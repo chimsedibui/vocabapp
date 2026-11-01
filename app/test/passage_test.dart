@@ -181,6 +181,7 @@ void main() {
           expect(body['response_format']['json_schema']['strict'], true);
           expect(body.containsKey('tools'), false);
           expect(body['store'], false);
+          expect(body.containsKey('reasoning_effort'), false);
           return response(content: '{"items":[]}');
         }),
       );
@@ -209,6 +210,11 @@ void main() {
           final body = jsonDecode(r.body) as Map;
           expect(body.containsKey('store'), false);
           expect(body['model'], 'gemini-flash-latest');
+          expect(body['reasoning_effort'], 'medium');
+          expect(
+            body['max_completion_tokens'],
+            16384 - request.estimatedInputTokens,
+          );
           return response();
         }),
       );
@@ -219,11 +225,24 @@ void main() {
             provider: AiProvider.gemini,
             key: 'gemini-secret',
             model: 'gemini-flash-latest',
+            reasoning: ReasoningEffort.medium,
           ),
         ),
         onAttempt: (_) async {},
       );
       expect(result.configuration.label, 'Google Gemini');
+      const big = AiConfiguration(
+        provider: AiProvider.gemini,
+        key: 'k',
+        model: 'm',
+        contextWindow: 1000000,
+      );
+      expect(big.maxOutputTokens(1000), geminiMaxOutputTokens);
+      expect(
+        AiConfiguration.fromJson({...big.toJson()..remove('reasoning')})
+            .reasoning,
+        ReasoningEffort.low,
+      );
     },
   );
   test(

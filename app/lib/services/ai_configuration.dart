@@ -3,8 +3,15 @@ import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../domain/models.dart';
+import '../domain/passage.dart';
 
 enum AiProvider { openai, azure, gemini }
+
+/// Gemini thinking level, sent as `reasoning_effort`.
+enum ReasoningEffort { none, low, medium }
+
+/// Gemini's output cap; thinking tokens count against it.
+const geminiMaxOutputTokens = 65536;
 
 class AiConfiguration {
   const AiConfiguration({
@@ -14,11 +21,21 @@ class AiConfiguration {
     this.endpoint = '',
     this.structured = true,
     this.contextWindow = 16384,
+    this.reasoning = ReasoningEffort.low,
   });
   final AiProvider provider;
   final String key, model, endpoint;
   final bool structured;
   final int contextWindow;
+  final ReasoningEffort reasoning;
+
+  /// Output tokens for a request whose input is about [inputTokens].
+  int maxOutputTokens(int inputTokens) => provider == AiProvider.gemini
+      ? (contextWindow - inputTokens).clamp(
+          minOutputTokens,
+          geminiMaxOutputTokens,
+        )
+      : minOutputTokens;
   String get label => switch (provider) {
     AiProvider.openai => 'OpenAI',
     AiProvider.azure => 'Azure OpenAI',
@@ -72,6 +89,7 @@ class AiConfiguration {
     model,
     structured,
     contextWindow,
+    if (provider == AiProvider.gemini) reasoning.name,
   ]);
   Map<String, Object> toJson() => {
     'provider': provider.name,
@@ -80,6 +98,7 @@ class AiConfiguration {
     'endpoint': endpoint,
     'structured': structured,
     'context': contextWindow,
+    'reasoning': reasoning.name,
   };
   factory AiConfiguration.fromJson(Map<String, dynamic> json) =>
       AiConfiguration(
@@ -89,6 +108,9 @@ class AiConfiguration {
         endpoint: json['endpoint'] as String,
         structured: json['structured'] as bool,
         contextWindow: json['context'] as int,
+        reasoning: ReasoningEffort.values.byName(
+          json['reasoning'] as String? ?? ReasoningEffort.low.name,
+        ),
       );
 }
 

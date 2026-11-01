@@ -10,6 +10,9 @@ const cefrLevels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 const maxPassageChars = 100000;
 const maxPartBytes = 6000;
 
+/// Output tokens every model must have room for; Gemini may get more.
+const minOutputTokens = 2500;
+
 class PassageRequest {
   PassageRequest(String text, {this.minLevel = 'B1', this.maxItems = 30})
     : text = normalizeMeaning(text.replaceAll('\r\n', '\n')) {
@@ -41,7 +44,7 @@ class PassageRequest {
       256;
   void checkBudget(int contextWindow) {
     if (estimatedInputTokens > 4000 ||
-        estimatedInputTokens + 2500 > contextWindow) {
+        estimatedInputTokens + minOutputTokens > contextWindow) {
       throw const UserFacingException(
         'Một phần passage vượt ngân sách input ước tính hoặc cửa sổ model.',
       );

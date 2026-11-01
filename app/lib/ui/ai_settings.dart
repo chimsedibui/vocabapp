@@ -36,6 +36,7 @@ class _ConfigFields {
       endpoint = TextEditingController();
   final context = TextEditingController(text: '16384');
   bool structured = true;
+  ReasoningEffort reasoning = ReasoningEffort.low;
   void load(AiConfiguration c) {
     provider = c.provider;
     key.text = c.key;
@@ -43,6 +44,7 @@ class _ConfigFields {
     endpoint.text = c.endpoint;
     context.text = '${c.contextWindow}';
     structured = c.structured;
+    reasoning = c.reasoning;
   }
 
   AiConfiguration value() => AiConfiguration(
@@ -52,6 +54,7 @@ class _ConfigFields {
     endpoint: endpoint.text.trim(),
     structured: structured,
     contextWindow: int.tryParse(context.text) ?? 0,
+    reasoning: reasoning,
   );
   void dispose() {
     key.dispose();
@@ -202,11 +205,40 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
             controller: fields.context,
             enabled: !_busy,
             keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'Context window của model (tokens)',
-              helperText: 'App dành tối đa 2.500 output tokens.',
+              helperText: fields.provider == AiProvider.gemini
+                  ? 'Output (gồm cả thinking) dùng phần còn lại, tối đa 65.536 tokens.'
+                  : 'App dành tối đa 2.500 output tokens.',
             ),
           ),
+          if (fields.provider == AiProvider.gemini) ...[
+            const SizedBox(height: 12),
+            DropdownButtonFormField<ReasoningEffort>(
+              initialValue: fields.reasoning,
+              decoration: const InputDecoration(
+                labelText: 'Mức suy luận (thinking)',
+                helperText: 'Cao hơn: chậm và tốn token hơn.',
+              ),
+              items: const [
+                DropdownMenuItem(
+                  value: ReasoningEffort.none,
+                  child: Text('Không (none)'),
+                ),
+                DropdownMenuItem(
+                  value: ReasoningEffort.low,
+                  child: Text('Thấp (low)'),
+                ),
+                DropdownMenuItem(
+                  value: ReasoningEffort.medium,
+                  child: Text('Vừa (medium)'),
+                ),
+              ],
+              onChanged: _busy
+                  ? null
+                  : (v) => setState(() => fields.reasoning = v!),
+            ),
+          ],
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             value: fields.structured,
