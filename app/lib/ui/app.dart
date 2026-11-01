@@ -11,6 +11,8 @@ import 'editors.dart';
 import 'data_settings.dart';
 import 'desktop_settings.dart';
 import 'lookup_popup.dart';
+import 'brand.dart';
+import 'theme.dart';
 import 'word_details.dart';
 import 'review_page.dart';
 import 'ai_settings.dart';
@@ -91,38 +93,9 @@ class _VocabAppState extends State<VocabApp> {
   Widget build(BuildContext context) => MaterialApp(
     title: 'VocabApp',
     debugShowCheckedModeBanner: false,
-    theme: ThemeData(
-      useMaterial3: true,
-      colorScheme:
-          ColorScheme.fromSeed(
-            seedColor: const Color(0xff21634b),
-            brightness: Brightness.light,
-          ).copyWith(
-            primary: const Color(0xff21634b),
-            surface: const Color(0xfffaf9f5),
-          ),
-      scaffoldBackgroundColor: const Color(0xfffaf9f5),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: Color(0xfffaf9f5),
-        surfaceTintColor: Colors.transparent,
-      ),
-      cardTheme: CardThemeData(
-        elevation: 0,
-        color: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(22),
-          side: const BorderSide(color: Color(0xffe3e6de)),
-        ),
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
-        ),
-      ),
-    ),
+    theme: buildTheme(Brightness.light),
+    darkTheme: buildTheme(Brightness.dark),
+    themeMode: ThemeMode.system,
     builder: (context, child) => ValueListenableBuilder<double>(
       valueListenable: _scale,
       builder: (context, scale, _) => UiZoom(
@@ -376,12 +349,13 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     final wide = MediaQuery.sizeOf(context).width >= 850;
     return Scaffold(
       appBar: AppBar(
+        titleSpacing: 20,
         title: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.spa_outlined, color: Color(0xff21634b)),
+            BrandMark(size: 28),
             SizedBox(width: 10),
-            Text('VocabApp', style: TextStyle(fontWeight: FontWeight.w700)),
+            Text('VocabApp'),
           ],
         ),
         actions: [
@@ -492,21 +466,13 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   Widget _heading(String eyebrow, String title, [String? subtitle]) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text(
-        eyebrow,
-        style: const TextStyle(
-          letterSpacing: 2,
-          fontSize: 12,
-          color: Color(0xff536957),
-        ),
-      ),
-      const SizedBox(height: 8),
-      Text(
-        title,
-        style: Theme.of(context).textTheme.headlineMedium
-            ?.copyWith(fontWeight: FontWeight.w700),
-      ),
-      if (subtitle != null) ...[const SizedBox(height: 8), Text(subtitle)],
+      Text(eyebrow, style: Theme.of(context).textTheme.labelMedium),
+      const SizedBox(height: 6),
+      Text(title, style: Theme.of(context).textTheme.headlineMedium),
+      if (subtitle != null) ...[
+        const SizedBox(height: 6),
+        Text(subtitle, style: TextStyle(color: AppColors.of(context).muted)),
+      ],
     ],
   );
 
@@ -547,7 +513,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           padding: const EdgeInsets.all(24),
           children: [
             _heading(
-              'MỖI NGÀY MỘT CHÚT',
+              'Mỗi ngày một chút',
               'Gom từ. Nhớ lâu hơn.',
               'Một nơi cho những từ bạn muốn nhớ. Học gọn, theo nhịp của bạn.',
             ),
@@ -605,7 +571,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     final empty = s.senses == 0;
     return Card(
       margin: EdgeInsets.zero,
-      color: const Color(0xffe9f0e5),
+      color: AppColors.of(context).raisedTinted,
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -613,10 +579,9 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           children: [
             Text(
               empty ? 'Bắt đầu từ một từ.' : 'Dành vài phút cho trí nhớ.',
-              style: Theme.of(context).textTheme.headlineSmall
-                  ?.copyWith(fontWeight: FontWeight.w600),
+              style: Theme.of(context).textTheme.headlineSmall,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Text(
               empty
                   ? 'Thêm từ và nghĩa bạn muốn học. Thư viện được lưu ngay trên thiết bị.'
@@ -676,20 +641,21 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     margin: EdgeInsets.zero,
     child: LayoutBuilder(
       builder: (context, box) {
-        final badge = CircleAvatar(
-          radius: 20,
-          backgroundColor: const Color(0xffe9f0e5),
-          foregroundColor: const Color(0xff21634b),
-          child: Icon(icon, size: 20),
+        final colors = AppColors.of(context);
+        final badge = DecoratedBox(
+          decoration: BoxDecoration(
+            color: colors.accentSoft,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Icon(icon, size: 18, color: colors.accentSoftInk),
+          ),
         );
         final text = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              value,
-              style: Theme.of(context).textTheme.titleLarge
-                  ?.copyWith(fontWeight: FontWeight.w700),
-            ),
+            Text(value, style: Theme.of(context).textTheme.headlineSmall),
             Text(
               label,
               maxLines: 2,
@@ -728,7 +694,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _heading(
-                'THƯ VIỆN',
+                'Thư viện',
                 'Thư viện của bạn',
                 '${data.stats.entries} từ / cụm từ · ${data.stats.senses} nghĩa · ${data.decks.length} nhóm',
               ),
@@ -881,11 +847,12 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   }
 
   Widget _wordTile(_Overview data, Vocabulary word) {
-    final (status, color) = word.status == 'draft'
-        ? ('Bản nháp', const Color(0xfffbe9c8))
+    final colors = AppColors.of(context);
+    final (status, color, ink) = word.status == 'draft'
+        ? ('Bản nháp', colors.controlHover, colors.ink)
         : word.suspended
-        ? ('Tạm dừng học', const Color(0xffe6e6e6))
-        : ('Đã duyệt', const Color(0xffdcebdd));
+        ? ('Tạm dừng học', colors.controlDisabled, colors.muted)
+        : ('Đã duyệt', colors.accentSoft, colors.accentSoftInk);
     return Card(
       margin: EdgeInsets.zero,
       child: ListTile(
@@ -897,16 +864,21 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           children: [
             Text(
               word.term,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+              style: Theme.of(context).reading
+                  .copyWith(fontWeight: FontWeight.w600),
             ),
             DecoratedBox(
               decoration: BoxDecoration(
                 color: color,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(4),
               ),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                child: Text(status, style: const TextStyle(fontSize: 12)),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                child: Text(
+                  status,
+                  style: Theme.of(context).textTheme.labelSmall
+                      ?.copyWith(color: ink),
+                ),
               ),
             ),
           ],
@@ -929,7 +901,10 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
                 ),
               if (word.groups.isNotEmpty) ...[
                 const SizedBox(height: 4),
-                Text(word.groups, style: const TextStyle(fontSize: 12)),
+                Text(
+                  word.groups,
+                  style: Theme.of(context).textTheme.labelSmall,
+                ),
               ],
             ],
           ),
@@ -1109,7 +1084,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _heading('CÀI ĐẶT', 'Nhịp học của bạn'),
+            _heading('Cài đặt', 'Nhịp học của bạn'),
             const SizedBox(height: 24),
             if (box.maxWidth >= 860)
               Row(

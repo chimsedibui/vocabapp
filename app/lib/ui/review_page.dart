@@ -6,6 +6,7 @@ import '../data/library_repository.dart';
 import '../domain/models.dart';
 import '../domain/scheduler.dart';
 import 'editors.dart';
+import 'theme.dart';
 import 'word_details.dart';
 
 class ReviewPage extends StatefulWidget {
@@ -78,10 +79,10 @@ class _ReviewPageState extends State<ReviewPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.check_circle_outline,
                       size: 64,
-                      color: Color(0xff21634b),
+                      color: AppColors.of(context).accent,
                     ),
                     const SizedBox(height: 24),
                     Text(
@@ -156,11 +157,20 @@ class _ReviewPageState extends State<ReviewPage> {
                               ),
                               child: Column(
                                 children: [
-                                  const Text(
-                                    'TIẾNG ANH',
-                                    style: TextStyle(
-                                      letterSpacing: 2,
-                                      fontSize: 12,
+                                  DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      color: AppColors.of(context).controlHover,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
+                                      child: Text(
+                                        _revealed ? 'EN → VI' : 'EN',
+                                        style: Theme.of(context).code,
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(height: 24),
@@ -188,9 +198,7 @@ class _ReviewPageState extends State<ReviewPage> {
                                       child: Text(
                                         card.meaning,
                                         textAlign: TextAlign.center,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .headlineSmall,
+                                        style: Theme.of(context).reading,
                                       ),
                                     ),
                                   ] else
