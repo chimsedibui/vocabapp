@@ -98,7 +98,57 @@ class LibraryRepository {
     }
   }
 
+  /// The entry [term] belongs to (see [termKey]): exact spelling first, then
+  /// the oldest. Null when the library has no such word.
+  static Future<Map<String, Object?>?> findEntry(
+    DatabaseExecutor tx,
+    String term,
+  ) async {
+    final word = normalizeTerm(term);
+    final rows = await tx.query(
+      'entries',
+      where: "normalized_term=? COLLATE NOCASE AND source_language='en' AND target_language='vi'",
+      whereArgs: [word],
+      orderBy: 'created_at',
+    );
+    return rows.where((r) => r['normalized_term'] == word).firstOrNull ??
+        rows
+            .where(
+              (r) => termKey(r['normalized_term'] as String) == termKey(word),
+            )
+            .firstOrNull;
+  }
+
+  /// Senses of [term] and of words differing from it only in letter case.
+  Future<List<Vocabulary>> matches(String term) async {
+    final rows = await db.rawQuery(
+      '''SELECT s.*, e.term, e.id AS entry
+      FROM senses s JOIN entries e ON s.entry_id=e.id
+      WHERE e.normalized_term=? COLLATE NOCASE
+      AND e.source_language='en' AND e.target_language='vi'
+      ORDER BY e.created_at''',
+      [normalizeTerm(term)],
+    );
+    return rows
+        .map(
+          (r) => Vocabulary(
+            entryId: r['entry'] as String,
+            senseId: r['id'] as String,
+            term: r['term'] as String,
+            meaning: r['meaning'] as String,
+            senseKey: r['sense_key'] as String,
+            status: r['status'] as String,
+            groups: '',
+            suspended: false,
+            partOfSpeech: r['part_of_speech'] as String?,
+            pronunciation: r['pronunciation'] as String?,
+          ),
+        )
+        .toList();
+  }
+
   /// Returns true for a new sense; an existing sense is never overwritten here.
+  /// A meaning already on the word (see [meaningKey]) is reused.
   Future<bool> addWord({
     required String term,
     required String meaning,
@@ -143,7 +193,7 @@ class LibraryRepository {
     _checkDetails(partOfSpeech, ipa);
     final word = normalizeTerm(term);
     final definition = normalizeMeaning(meaning);
-    final key = senseKey.trim();
+    var key = senseKey.trim();
     if (word.isEmpty ||
         word.length > 200 ||
         definition.length > 1000 ||
@@ -156,15 +206,9 @@ class LibraryRepository {
       throw const UserFacingException('Cần có nghĩa trước khi đưa vào học.');
     }
     await _checkDeck(tx, deckId);
-    final matches = await tx.query(
-      'entries',
-      where: 'normalized_term=? AND source_language=? AND target_language=?',
-      whereArgs: [word, 'en', 'vi'],
-    );
-    final entryId = matches.isEmpty
-        ? Ids.entry(word, 'en', 'vi')
-        : matches.single['id'] as String;
-    if (matches.isEmpty) {
+    final match = await findEntry(tx, word);
+    final entryId = match?['id'] as String? ?? Ids.entry(word, 'en', 'vi');
+    if (match == null) {
       await tx.insert('entries', {
         'id': entryId,
         'term': word,
@@ -172,23 +216,42 @@ class LibraryRepository {
         'created_at': clock().toUtc().millisecondsSinceEpoch,
       });
     }
-    final existing = await tx.query(
+    final senses = await tx.query(
       'senses',
-      where: 'entry_id=? AND sense_key=?',
-      whereArgs: [entryId, key],
+      where: 'entry_id=?',
+      whereArgs: [entryId],
     );
-    if (existing.isNotEmpty &&
-        definition.isNotEmpty &&
-        existing.single['meaning'] != definition) {
-      throw const UserFacingException(
-        'Từ và mã nghĩa này đã có nội dung khác. Hãy sửa nghĩa hiện có hoặc chọn mã nghĩa mới.',
-      );
+    final same = definition.isEmpty
+        ? null
+        : senses
+              .where(
+                (r) =>
+                    meaningKey(r['meaning'] as String) ==
+                    meaningKey(definition),
+              )
+              .firstOrNull;
+    var existing =
+        same ?? senses.where((r) => r['sense_key'] == key).firstOrNull;
+    if (existing != null && same == null && definition.isNotEmpty) {
+      // The default key is taken by another meaning: add a sibling sense.
+      if (key != 'primary' || (existing['meaning'] as String).isEmpty) {
+        throw const UserFacingException(
+          'Từ và mã nghĩa này đã có nội dung khác. Hãy sửa nghĩa hiện có hoặc chọn mã nghĩa mới.',
+        );
+      }
+      final keys = senses.map((r) => r['sense_key']).toSet();
+      var n = 2;
+      while (keys.contains('primary-$n')) {
+        n++;
+      }
+      key = 'primary-$n';
+      existing = null;
     }
     await tx.insert('deck_entries', {
       'deck_id': deckId,
       'entry_id': entryId,
     }, conflictAlgorithm: ConflictAlgorithm.ignore);
-    if (existing.isNotEmpty) return false;
+    if (existing != null) return false;
     final senseId = Ids.sense(entryId, key);
     await tx.insert('senses', {
       'id': senseId,

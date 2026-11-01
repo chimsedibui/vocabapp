@@ -4,6 +4,20 @@ String normalizeTerm(String value) =>
     unicode.nfc(value).trim().replaceAll(RegExp(r'\s+'), ' ');
 String normalizeMeaning(String value) => unicode.nfc(value).trim();
 
+/// Library match key: only a capitalised first letter is ignored, so "Tea" at
+/// a sentence start is "tea", while "US" and "us" stay different words.
+String termKey(String term) {
+  final t = normalizeTerm(term);
+  return t.isEmpty ? t : t[0].toLowerCase() + t.substring(1);
+}
+
+/// Meanings that differ only in case, punctuation or spacing are the same.
+String meaningKey(String meaning) =>
+    normalizeMeaning(meaning)
+        .toLowerCase()
+        .replaceAll(RegExp(r'[\p{P}\p{S}\s]+', unicode: true), ' ')
+        .trim();
+
 /// Allowed `senses.part_of_speech` values, shared by import, editor and AI.
 const partsOfSpeech = {
   'noun': 'danh từ',

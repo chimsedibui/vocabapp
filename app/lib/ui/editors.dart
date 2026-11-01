@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../data/library_repository.dart';
@@ -72,8 +74,25 @@ class _WordEditorState extends State<WordEditor> {
   late String? _deck = widget.initialDeck ?? widget.decks.firstOrNull?.id;
   bool _busy = false, _reset = false;
   String? _error;
+  List<Vocabulary> _known = const [];
+  Timer? _lookup;
+
+  void _termChanged(String value) {
+    _lookup?.cancel();
+    _lookup = Timer(const Duration(milliseconds: 300), () async {
+      final term = normalizeTerm(value);
+      final known = term.isEmpty
+          ? const <Vocabulary>[]
+          : await widget.repository.matches(term);
+      if (mounted && normalizeTerm(_term.text) == term) {
+        setState(() => _known = known);
+      }
+    });
+  }
+
   @override
   void dispose() {
+    _lookup?.cancel();
     _term.dispose();
     _meaning.dispose();
     _sense.dispose();
@@ -100,7 +119,10 @@ class _WordEditorState extends State<WordEditor> {
         if (_deck == null) {
           throw const UserFacingException('Tạo một nhóm trước khi thêm từ.');
         }
-        await widget.repository.addWord(
+        final term = normalizeTerm(_term.text);
+        final existed = (await widget.repository.matches(term))
+            .any((k) => termKey(k.term) == termKey(term));
+        final added = await widget.repository.addWord(
           term: _term.text,
           meaning: _meaning.text,
           deckId: _deck!,
@@ -109,8 +131,19 @@ class _WordEditorState extends State<WordEditor> {
           partOfSpeech: _pos,
           pronunciation: _ipa.text,
         );
+        if (mounted) {
+          Navigator.pop(
+            context,
+            !existed
+                ? 'Đã lưu vào thư viện.'
+                : added
+                ? 'Từ "$term" đã có; đã thêm nghĩa mới.'
+                : 'Từ "$term" và nghĩa này đã có; chỉ gắn vào nhóm.',
+          );
+        }
+        return;
       }
-      if (mounted) Navigator.pop(context, true);
+      if (mounted) Navigator.pop(context, 'Đã lưu vào thư viện.');
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -184,7 +217,7 @@ class _WordEditorState extends State<WordEditor> {
     setState(() => _busy = true);
     try {
       await widget.repository.restoreVersion(word.senseId, chosen);
-      if (mounted) Navigator.pop(context, true);
+      if (mounted) Navigator.pop(context, 'Đã khôi phục phiên bản cũ.');
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -220,11 +253,28 @@ class _WordEditorState extends State<WordEditor> {
                   controller: _term,
                   autofocus: true,
                   maxLength: 200,
+                  onChanged: _termChanged,
                   decoration: const InputDecoration(
                     labelText: 'Từ hoặc cụm từ',
                     hintText: 'Ví dụ: retain',
                   ),
                 ),
+                if (_known.isNotEmpty)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      [
+                        'Đã có trong thư viện:',
+                        for (final k in _known)
+                          '• ${k.term}: ${k.meaning.isEmpty ? '(nháp, chưa có nghĩa)' : k.meaning}'
+                              '${termKey(k.term) == termKey(_term.text) ? '' : ' (khác hoa/thường, lưu riêng)'}',
+                        'Nhập nghĩa đã có thì chỉ gắn vào nhóm; nghĩa khác sẽ thêm thành nghĩa mới.',
+                      ].join('\n'),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.tertiary,
+                      ),
+                    ),
+                  ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: _deck,

@@ -177,30 +177,7 @@ class PassageRepository {
     );
   }
 
-  Future<List<Vocabulary>> matches(String term) async {
-    final rows = await db.rawQuery(
-      '''SELECT s.*, e.term, e.id AS entry
-      FROM senses s JOIN entries e ON s.entry_id=e.id
-      WHERE e.normalized_term=? AND e.source_language='en' AND e.target_language='vi' ''',
-      [normalizeTerm(term)],
-    );
-    return rows
-        .map(
-          (r) => Vocabulary(
-            entryId: r['entry'] as String,
-            senseId: r['id'] as String,
-            term: r['term'] as String,
-            meaning: r['meaning'] as String,
-            senseKey: r['sense_key'] as String,
-            status: r['status'] as String,
-            groups: '',
-            suspended: false,
-            partOfSpeech: r['part_of_speech'] as String?,
-            pronunciation: r['pronunciation'] as String?,
-          ),
-        )
-        .toList();
-  }
+  Future<List<Vocabulary>> matches(String term) => library.matches(term);
 
   /// All selected rows commit together. No existing text, card or review is overwritten.
   Future<int> approve(
@@ -249,41 +226,42 @@ class PassageRepository {
         );
       }
       final item = valid.items.single;
-      final entries = await tx.query(
-        'entries',
-        where: "normalized_term=? AND source_language='en' AND target_language='vi'",
-        whereArgs: [item.term],
-      );
-      final entryId = entries.isEmpty
-          ? Ids.entry(item.term, 'en', 'vi')
-          : entries.single['id'] as String;
-      if (entries.isEmpty) {
-        await tx.insert('entries', {
-          'id': entryId,
-          'term': item.term,
-          'normalized_term': item.term,
-          'created_at': library.clock().toUtc().millisecondsSinceEpoch,
-        });
-      }
-      final senses = await tx.query(
-        'senses',
-        where: 'entry_id=?',
-        whereArgs: [entryId],
-      );
       Map<String, Object?>? existing;
+      String entryId;
       if (selection.existingSenseId != null) {
-        existing = senses
-            .where((r) => r['id'] == selection.existingSenseId)
-            .firstOrNull;
+        // May belong to a case variant the user chose to merge into.
+        existing = (await tx.query(
+          'senses',
+          where: 'id=?',
+          whereArgs: [selection.existingSenseId],
+        )).firstOrNull;
         if (existing == null || existing['status'] != 'approved') {
           throw const UserFacingException('Nghĩa đã chọn không còn khả dụng.');
         }
+        entryId = existing['entry_id'] as String;
       } else {
-        existing = senses
-            .where(
-              (r) => normalizeMeaning(r['meaning'] as String) == item.meaning,
-            )
-            .firstOrNull;
+        final entry = await LibraryRepository.findEntry(tx, item.term);
+        entryId = entry?['id'] as String? ?? Ids.entry(item.term, 'en', 'vi');
+        if (entry == null) {
+          await tx.insert('entries', {
+            'id': entryId,
+            'term': item.term,
+            'normalized_term': item.term,
+            'created_at': library.clock().toUtc().millisecondsSinceEpoch,
+          });
+        }
+        existing =
+            (await tx.query(
+                  'senses',
+                  where: 'entry_id=?',
+                  whereArgs: [entryId],
+                ))
+                .where(
+                  (r) =>
+                      meaningKey(r['meaning'] as String) ==
+                      meaningKey(item.meaning),
+                )
+                .firstOrNull;
       }
       final senseKey = 'ai-${_uuid.v4()}';
       final senseId =
