@@ -64,6 +64,9 @@ class MainActivity : FlutterActivity() {
 
     private fun installApk(apk: File) {
         val installer = packageManager.packageInstaller
+        // One update at a time: a second tap would otherwise leave an older
+        // session that Android later reports as aborted.
+        installer.mySessions.forEach { runCatching { installer.abandonSession(it.sessionId) } }
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
         val id = installer.createSession(params)
         installer.openSession(id).use { session ->
@@ -90,7 +93,9 @@ class MainActivity : FlutterActivity() {
                 val confirm = intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
                 if (confirm != null) startActivity(confirm)
             }
-            PackageInstaller.STATUS_SUCCESS -> Unit
+            // Aborted: the user cancelled, or an abandoned/superseded session;
+            // the install itself may still succeed, so this is not an error.
+            PackageInstaller.STATUS_SUCCESS, PackageInstaller.STATUS_FAILURE_ABORTED -> Unit
             else -> Toast.makeText(
                 this,
                 "Không cài được bản cập nhật: " +
