@@ -34,11 +34,9 @@ class DatabaseSnapshots {
         RegExp(r'[^0-9]'),
         '',
       );
+      // Sub-second digits keep the order when versions change within a second.
       target = File(
-        p.join(
-          folder.path,
-          'vocabulary-before-$appVersion-${stamp.substring(0, 14)}.db',
-        ),
+        p.join(folder.path, 'vocabulary-before-$appVersion-$stamp.db'),
       );
       await _copy(_database, target);
     }
@@ -60,11 +58,11 @@ class DatabaseSnapshots {
   }
 
   static String _stamp(File f) =>
-      RegExp(r'-(\d{14})\.db$').firstMatch(f.path)?.group(1) ?? '';
+      RegExp(r'-(\d{14,})\.db$').firstMatch(f.path)?.group(1) ?? '';
 
   /// "0.3.3" from `vocabulary-before-0.3.3-20261028101500.db`.
   static String version(File f) =>
-      RegExp(r'before-(.+)-\d{14}\.db$').firstMatch(f.path)?.group(1) ?? '?';
+      RegExp(r'before-(.+)-\d{14,}\.db$').firstMatch(f.path)?.group(1) ?? '?';
 
   static DateTime? takenAt(File f) {
     final s = _stamp(f);
