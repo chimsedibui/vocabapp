@@ -11,7 +11,6 @@ import '../services/ai_configuration.dart';
 import '../services/passage_service.dart';
 import 'ai_settings.dart';
 import 'editors.dart';
-import 'word_details.dart';
 
 class PassagePage extends StatefulWidget {
   const PassagePage({
@@ -420,40 +419,88 @@ class _PassagePageState extends State<PassagePage> {
     }
   }
 
-  Widget _proposal(_Proposal p) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _cell(Widget child) =>
+      Padding(padding: const EdgeInsets.all(6), child: child);
+
+  Widget _head(String text) =>
+      _cell(Text(text, style: const TextStyle(fontWeight: FontWeight.bold)));
+
+  /// Review table: one text row per proposal; meaning, level and how to treat
+  /// an existing word stay editable inline.
+  Widget _table() {
+    final theme = Theme.of(context);
+    final muted = TextStyle(color: theme.colorScheme.outline);
+    final allSelected = _proposals.every((p) => p.selected);
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Table(
+        columnWidths: const {
+          0: FixedColumnWidth(44),
+          1: FixedColumnWidth(140),
+          2: FixedColumnWidth(84),
+          3: FixedColumnWidth(120),
+          4: FixedColumnWidth(80),
+          5: FixedColumnWidth(260),
+          6: FixedColumnWidth(220),
+        },
+        defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+        border: TableBorder(
+          horizontalInside: BorderSide(color: theme.dividerColor),
+          bottom: BorderSide(color: theme.dividerColor),
+        ),
         children: [
-          CheckboxListTile(
-            contentPadding: EdgeInsets.zero,
-            value: p.selected,
-            onChanged: _busy ? null : (v) => setState(() => p.selected = v!),
-            title: Text(
-              p.term,
-              style: const TextStyle(fontWeight: FontWeight.bold),
+          TableRow(
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest,
             ),
-            subtitle: Text(
-              '${p.level} · mức ước lượng${p.matches.isEmpty ? '' : ' · đã có ${p.matches.length} nghĩa trong thư viện'}',
-            ),
+            children: [
+              Checkbox(
+                value: allSelected,
+                onChanged: _busy
+                    ? null
+                    : (v) => setState(() {
+                        for (final p in _proposals) {
+                          p.selected = v!;
+                        }
+                      }),
+              ),
+              _head('Từ'),
+              _head('Từ loại'),
+              _head('IPA'),
+              _head('CEFR'),
+              _head('Nghĩa (sửa được)'),
+              _head('Trong thư viện'),
+            ],
           ),
-          WordDetails(
-            term: p.term,
-            partOfSpeech: p.partOfSpeech,
-            pronunciation: p.pronunciation,
+          for (final p in _proposals) _row(p, muted),
+        ],
+      ),
+    );
+  }
+
+  TableRow _row(_Proposal p, TextStyle muted) {
+    final approved = p.matches.where((v) => v.status == 'approved');
+    return TableRow(
+      children: [
+        Checkbox(
+          value: p.selected,
+          onChanged: _busy ? null : (v) => setState(() => p.selected = v!),
+        ),
+        _cell(
+          Text(p.term, style: const TextStyle(fontWeight: FontWeight.bold)),
+        ),
+        _cell(Text(partsOfSpeech[p.partOfSpeech] ?? '—', style: muted)),
+        _cell(
+          Text(
+            p.pronunciation == null ? '—' : '/${p.pronunciation}/',
+            style: muted,
           ),
-          TextField(
-            controller: p.meaning,
-            enabled: !_busy && p.existingSense == null,
-            maxLength: 160,
-            decoration: const InputDecoration(
-              labelText: 'Nghĩa ngắn · có thể sửa',
-            ),
-          ),
-          DropdownButtonFormField<String>(
-            initialValue: p.level,
-            decoration: const InputDecoration(labelText: 'Mức CEFR ước lượng'),
+        ),
+        _cell(
+          DropdownButton<String>(
+            value: p.level,
+            isDense: true,
+            underline: const SizedBox(),
             items: cefrLevels
                 .where(
                   (l) => cefrLevels.indexOf(l) >= cefrLevels.indexOf(_level),
@@ -462,38 +509,58 @@ class _PassagePageState extends State<PassagePage> {
                 .toList(),
             onChanged: _busy ? null : (v) => setState(() => p.level = v!),
           ),
-          if (p.matches.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: p.existingSense ?? '',
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: 'Xử lý từ đã có'),
-              items: [
-                const DropdownMenuItem(
-                  value: '',
-                  child: Text('Dùng nghĩa đề xuất (trùng thì gắn nhóm)'),
-                ),
-                ...p.matches
-                    .where((v) => v.status == 'approved')
-                    .map(
-                      (v) => DropdownMenuItem(
+        ),
+        _cell(
+          TextField(
+            key: ValueKey('meaning-${p.term}'),
+            controller: p.meaning,
+            enabled: !_busy && p.existingSense == null,
+            maxLength: 160,
+            maxLines: null,
+            decoration: const InputDecoration(
+              isDense: true,
+              counterText: '',
+              border: InputBorder.none,
+            ),
+          ),
+        ),
+        _cell(
+          p.matches.isEmpty
+              ? Text('Mới', style: muted)
+              : approved.isEmpty
+              ? Text('Có ${p.matches.length} nghĩa nháp', style: muted)
+              : DropdownButton<String>(
+                  value: p.existingSense ?? '',
+                  isDense: true,
+                  isExpanded: true,
+                  underline: const SizedBox(),
+                  items: [
+                    DropdownMenuItem(
+                      value: '',
+                      child: Text(
+                        'Đã có ${p.matches.length} nghĩa · dùng nghĩa này',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    for (final v in approved)
+                      DropdownMenuItem(
                         value: v.senseId,
                         child: Text(
-                          'Giữ nghĩa: ${v.meaning}',
+                          'Giữ: ${v.term == p.term ? '' : '${v.term} – '}${v.meaning}',
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                    ),
-              ],
-              onChanged: _busy
-                  ? null
-                  : (v) => setState(() => p.existingSense = v == '' ? null : v),
-            ),
-          ],
-        ],
-      ),
-    ),
-  );
+                  ],
+                  onChanged: _busy
+                      ? null
+                      : (v) => setState(
+                          () => p.existingSense = v == '' ? null : v,
+                        ),
+                ),
+        ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -507,9 +574,11 @@ class _PassagePageState extends State<PassagePage> {
       final largest = parts
           .map((p) => p.estimatedInputTokens)
           .reduce((a, b) => a > b ? a : b);
+      final output =
+          _preferences?.primary.maxOutputTokens(largest) ?? minOutputTokens;
       budget = parts.length == 1
-          ? 'Input ước tính bảo thủ: $largest / 4.000 tokens; output cap: 2.500 tokens. Một lần bấm gọi tối đa 3 HTTP attempts, trong 120 giây.'
-          : 'Chia thành ${parts.length} phần → ${parts.length} request, lần lượt từng phần (input ≤ $largest / 4.000 tokens, output cap 2.500 tokens mỗi phần; mỗi phần tối đa 3 HTTP attempts trong 120 giây). Số mục tối đa được chia cho các phần theo độ dài.';
+          ? 'Input ước tính bảo thủ: $largest / 4.000 tokens; output cap: $output tokens. Một lần bấm gọi tối đa 3 HTTP attempts, trong 120 giây.'
+          : 'Chia thành ${parts.length} phần → ${parts.length} request, lần lượt từng phần (input ≤ $largest / 4.000 tokens, output cap $output tokens mỗi phần; mỗi phần tối đa 3 HTTP attempts trong 120 giây). Số mục tối đa được chia cho các phần theo độ dài.';
     } on UserFacingException catch (e) {
       budget = e.message;
     } catch (_) {
@@ -665,7 +734,7 @@ class _PassagePageState extends State<PassagePage> {
                       ),
                     ],
                   ),
-                  ..._proposals.map(_proposal),
+                  if (_proposals.isNotEmpty) _table(),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
                     key: ValueKey('deck-$_deck-${_decks.length}'),

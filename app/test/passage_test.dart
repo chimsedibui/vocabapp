@@ -725,18 +725,21 @@ void main() {
       expect(await repo.approve(id, deck, [const ReviewedItem(item)]), 1);
       expect((await db.query('senses')).length, 2);
     });
-    test('a capitalised term and near-identical meaning reuse the old sense', () async {
-      final word = '${item.term[0].toUpperCase()}${item.term.substring(1)}';
-      await library.addWord(
-        term: word,
-        meaning: '${item.meaning.toUpperCase()}.',
-        deckId: deck,
-      );
-      final id = await completed();
-      expect(await repo.approve(id, deck, [const ReviewedItem(item)]), 0);
-      expect((await db.query('entries')).single['term'], word);
-      expect((await db.query('senses')).length, 1);
-    });
+    test(
+      'a capitalised term and near-identical meaning reuse the old sense',
+      () async {
+        final word = '${item.term[0].toUpperCase()}${item.term.substring(1)}';
+        await library.addWord(
+          term: word,
+          meaning: '${item.meaning.toUpperCase()}.',
+          deckId: deck,
+        );
+        final id = await completed();
+        expect(await repo.approve(id, deck, [const ReviewedItem(item)]), 0);
+        expect((await db.query('entries')).single['term'], word);
+        expect((await db.query('senses')).length, 1);
+      },
+    );
     test('invalid selection rolls back the entire batch', () async {
       final id = await completed();
       await expectLater(
@@ -920,12 +923,12 @@ void main() {
         expect(find.text('persistent'), findsOneWidget);
         expect(await db.query('cards'), isEmpty);
         await tester.scrollUntilVisible(
-          find.widgetWithText(TextField, 'Nghĩa ngắn · có thể sửa'),
+          find.byKey(const ValueKey('meaning-persistent')),
           150,
           scrollable: find.byType(Scrollable).first,
         );
         await tester.enterText(
-          find.widgetWithText(TextField, 'Nghĩa ngắn · có thể sửa'),
+          find.byKey(const ValueKey('meaning-persistent')),
           'bền bỉ',
         );
         FocusManager.instance.primaryFocus?.unfocus();
