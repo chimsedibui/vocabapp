@@ -12,7 +12,9 @@ import '../data/database.dart';
 import '../data/library_repository.dart';
 import '../data/snapshots.dart';
 import '../domain/models.dart';
+import '../services/app_updater.dart';
 import '../services/backup_service.dart';
+import '../services/desktop_shell.dart';
 import '../services/release_service.dart';
 import 'editors.dart';
 
@@ -21,15 +23,19 @@ class DataSettings extends StatefulWidget {
     super.key,
     required this.repository,
     required this.onRestored,
+    this.desktop,
   });
   final LibraryRepository repository;
   final VoidCallback onRestored;
+  final DesktopShell? desktop;
   @override
   State<DataSettings> createState() => _DataSettingsState();
 }
 
 class _DataSettingsState extends State<DataSettings> {
   final _releases = ReleaseService();
+  final _updater = AppUpdater();
+  double? _progress;
   String? _version;
   String? _message;
   bool _busy = false;
@@ -80,6 +86,7 @@ class _DataSettingsState extends State<DataSettings> {
   @override
   void dispose() {
     _releases.close();
+    _updater.close();
     super.dispose();
   }
 
@@ -182,6 +189,55 @@ class _DataSettingsState extends State<DataSettings> {
     }
   }
 
+  Future<String?> _update(AppRelease release) async {
+    if (Platform.isWindows) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('Cập nhật lên ${release.version}?'),
+          content: const Text(
+            'VocabApp sẽ đóng để cài bản mới rồi tự mở lại. Thư viện được tự lưu trước khi nâng cấp.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Để sau'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Cập nhật'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return null;
+    }
+    final dir = Directory(
+      p.join((await getTemporaryDirectory()).path, 'update'),
+    );
+    try {
+      final file = await _updater.download(
+        release,
+        dir,
+        onProgress: (value) {
+          if (mounted) setState(() => _progress = value);
+        },
+      );
+      await _updater.install(
+        file,
+        quit: () async {
+          final desktop = widget.desktop;
+          desktop == null ? exit(0) : await desktop.quit();
+        },
+      );
+    } finally {
+      if (mounted) setState(() => _progress = null);
+    }
+    return Platform.isAndroid
+        ? 'Đã tải xong bản ${release.version}. Xác nhận cài đặt trong hộp thoại của Android.'
+        : null;
+  }
+
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -273,7 +329,7 @@ class _DataSettingsState extends State<DataSettings> {
               ),
               const SizedBox(height: 12),
               const Text(
-                'Bản mới được phát hành trên GitHub. Chỉ kiểm tra khi bạn chọn; phiên học offline vẫn hoạt động bình thường.',
+                'Bản mới được phát hành trên GitHub. Chỉ kiểm tra khi bạn chọn; có thể cập nhật ngay trong app.',
               ),
               const SizedBox(height: 16),
               Wrap(
@@ -288,10 +344,20 @@ class _DataSettingsState extends State<DataSettings> {
                             if (mounted) setState(() => _release = release);
                             return release == null
                                 ? 'Không có bản mới được phát hành cho phiên bản này.'
-                                : 'Có bản ${release.version}. Mở trang phát hành để xem thay đổi và tải APK hoặc bản Windows.';
+                                : AppUpdater.supported
+                                ? 'Có bản ${release.version}. Chọn Cập nhật ngay để tải và cài.'
+                                : 'Có bản ${release.version}. Mở trang phát hành để xem thay đổi và tải bản cài.';
                           }),
                     child: const Text('Kiểm tra bản mới'),
                   ),
+                  if (_release != null && AppUpdater.supported)
+                    FilledButton.icon(
+                      onPressed: _busy
+                          ? null
+                          : () => _run(() => _update(_release!)),
+                      icon: const Icon(Icons.system_update_alt),
+                      label: Text('Cập nhật ngay (${_release!.version})'),
+                    ),
                   TextButton(
                     onPressed: _busy
                         ? null
@@ -310,9 +376,9 @@ class _DataSettingsState extends State<DataSettings> {
         ),
       ),
       if (_busy)
-        const Padding(
-          padding: EdgeInsets.all(12),
-          child: LinearProgressIndicator(),
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: LinearProgressIndicator(value: _progress),
         ),
       if (_message != null)
         Padding(padding: const EdgeInsets.all(12), child: Text(_message!)),

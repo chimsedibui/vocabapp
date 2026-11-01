@@ -34,4 +34,5 @@ Name: "{autodesktop}\VocabApp"; Filename: "{app}\vocabapp.exe"; Tasks: desktopic
 ; Start with Windows is set from the app; remove it on uninstall.
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "VocabApp"; ValueType: none; Flags: uninsdeletevalue dontcreatekey
 [Run]
-Filename: "{app}\vocabapp.exe"; Description: "Open VocabApp"; Flags: nowait postinstall skipifsilent
+; No skipifsilent: the silent in-app update (AppUpdater) reopens the app this way.
+Filename: "{app}\vocabapp.exe"; Description: "Open VocabApp"; Flags: nowait postinstall

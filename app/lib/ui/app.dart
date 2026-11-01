@@ -1060,6 +1060,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       const AiSettings(),
       DataSettings(
         repository: repo,
+        desktop: widget.desktop,
         onRestored: () {
           _deck = null;
           widget.sync?.requestSync();
