@@ -43,7 +43,7 @@ void main() {
     expect(find.text('retain'), findsOneWidget);
     expect(find.text('giữ lại'), findsNothing);
     expect(find.text('Nhớ'), findsNothing);
-    await tester.tap(find.text('Hiện nghĩa'));
+    await tester.tap(find.byKey(const Key('reveal')));
     await tester.pumpAndSettle();
     expect(find.text('giữ lại'), findsOneWidget);
     await tester.ensureVisible(find.text('Nhớ'));
@@ -52,6 +52,40 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Đã lưu 1 lượt ôn'), findsOneWidget);
     expect((await db.query('review_events')).length, 1);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('flashcards flip both ways, go back and use keys and swipes', (
+    tester,
+  ) async {
+    final deck = (await repo.decks()).single.id;
+    await repo.addWord(term: 'retain', meaning: 'giữ lại', deckId: deck);
+    await repo.addWord(term: 'resilient', meaning: 'kiên cường', deckId: deck);
+    await tester.pumpWidget(MaterialApp(home: ReviewPage(repository: repo)));
+    await tester.pumpAndSettle();
+    expect(find.text('retain'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
+    await tester.pumpAndSettle();
+    expect(await db.query('review_events'), isEmpty);
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pumpAndSettle();
+    expect(find.text('giữ lại'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pumpAndSettle();
+    expect(find.text('giữ lại'), findsNothing);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
+    await tester.pumpAndSettle();
+    expect((await db.query('review_events')).length, 1);
+    expect(find.text('resilient'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Đã đánh giá: Nhớ'), findsOneWidget);
+    await tester.drag(find.text('retain'), const Offset(-300, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('resilient'), findsOneWidget);
+    await tester.tap(find.text('resilient'));
+    await tester.pumpAndSettle();
+    expect(find.text('kiên cường'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -66,7 +100,7 @@ void main() {
       await tester.pumpWidget(MaterialApp(home: ReviewPage(repository: repo)));
       await tester.pumpAndSettle();
       expect(find.text('Quên'), findsNothing);
-      await tester.tap(find.text('Hiện nghĩa'));
+      await tester.tap(find.byKey(const Key('reveal')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Quên'));
       await tester.pumpAndSettle();
