@@ -2,11 +2,13 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:timezone/data/latest.dart' as tz;
 
 import 'data/database.dart';
 import 'data/library_repository.dart';
+import 'data/snapshots.dart';
 import 'services/desktop_shell.dart';
 import 'services/sync_service.dart';
 import 'ui/app.dart';
@@ -16,8 +18,16 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   tz.initializeTimeZones();
   try {
-    final db = await openAppDatabase();
     final dir = await getApplicationSupportDirectory();
+    await dir.create(recursive: true);
+    try {
+      final info = await PackageInfo.fromPlatform();
+      await DatabaseSnapshots(dir).beforeOpen(info.version);
+    } catch (_) {
+      // A failed copy (e.g. disk full) must not lock the user out; sync and
+      // manual backups remain.
+    }
+    final db = await openAppDatabase();
     final uiScale = await UiScaleController.load(
       File(p.join(dir.path, 'ui.json')),
     );

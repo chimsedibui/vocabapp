@@ -314,6 +314,55 @@ class LibraryRepository {
     });
   }
 
+  /// Earlier versions, newest first. The live row is the current version.
+  Future<List<SenseVersion>> history(String senseId) async {
+    final rows = await db.query(
+      'sense_history',
+      where: 'sense_id=?',
+      whereArgs: [senseId],
+      orderBy: 'valid_to DESC',
+    );
+    DateTime? time(Object? ms) => ms == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(ms as int, isUtc: true);
+    return [
+      for (final r in rows)
+        SenseVersion(
+          meaning: r['meaning'] as String,
+          status: r['status'] as String,
+          partOfSpeech: r['part_of_speech'] as String?,
+          pronunciation: r['pronunciation'] as String?,
+          validFrom: time(r['valid_from']),
+          validTo: time(r['valid_to'])!,
+          deleted: r['change'] == 'delete',
+        ),
+    ];
+  }
+
+  /// Brings an old version back as a new edit, so it is itself versioned.
+  Future<void> restoreVersion(String senseId, SenseVersion version) async {
+    final current = await db.query(
+      'senses',
+      columns: ['status'],
+      where: 'id=?',
+      whereArgs: [senseId],
+    );
+    if (current.isEmpty) {
+      throw const UserFacingException('Không tìm thấy từ này.');
+    }
+    await saveMeaning(
+      senseId,
+      version.meaning,
+      approve:
+          current.single['status'] == 'approved' ||
+          version.status == 'approved',
+      details: (
+        partOfSpeech: version.partOfSpeech,
+        pronunciation: version.pronunciation,
+      ),
+    );
+  }
+
   Future<void> setSuspended(String senseId, bool suspended) async {
     await db.rawUpdate(
       'UPDATE cards SET suspended=?, revision=revision+1 WHERE sense_id=?',

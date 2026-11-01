@@ -323,6 +323,7 @@ void main() {
       root['version'] = 2;
       root['db_version'] = 2;
       root['data'].remove('import_batches');
+      root['data'].remove('sense_history');
       for (final r in root['data']['senses']) {
         for (final f in ['part_of_speech', 'pronunciation', 'note']) {
           r.remove(f);
@@ -493,7 +494,7 @@ void main() {
     await first.close();
     final db = await openVocabularyDatabase(databaseFactoryFfiNoIsolate, path);
     try {
-      expect(await db.getVersion(), 4);
+      expect(await db.getVersion(), 5);
       expect(await db.query('cards'), cards);
       expect((await db.query('review_events')).single['id'], 'review');
       expect(await db.query('import_batches'), isEmpty);

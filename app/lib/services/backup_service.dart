@@ -34,6 +34,7 @@ class BackupService {
     'passage_jobs',
     'sense_origins',
     'import_batches',
+    'sense_history',
   ];
 
   Future<Uint8List> export() => db.transaction(_capture);
@@ -51,8 +52,8 @@ class BackupService {
       utf8.encode(
         jsonEncode({
           'format': 'vocabapp-backup',
-          'version': 3,
-          'db_version': 3,
+          'version': 4,
+          'db_version': 4,
           'created_at': DateTime.now().toUtc().toIso8601String(),
           'sha256': sha256.convert(utf8.encode(payload)).toString(),
           'data': rows,
@@ -74,7 +75,8 @@ class BackupService {
       if (root['format'] != 'vocabapp-backup' ||
           !((root['version'] == 1 && root['db_version'] == 1) ||
               (root['version'] == 2 && root['db_version'] == 2) ||
-              (root['version'] == 3 && root['db_version'] == 3))) {
+              (root['version'] == 3 && root['db_version'] == 3) ||
+              (root['version'] == 4 && root['db_version'] == 4))) {
         throw const FormatException();
       }
       final data = root['data'] as Map<String, dynamic>;
@@ -83,7 +85,9 @@ class BackupService {
             ? 7
             : root['version'] == 2
             ? 9
-            : 10,
+            : root['version'] == 3
+            ? 10
+            : 11,
       );
       if (data.length != oldTables.length ||
           !oldTables.every(data.containsKey) ||
@@ -95,6 +99,7 @@ class BackupService {
         data['passage_jobs'] = <dynamic>[];
         data['sense_origins'] = <dynamic>[];
       }
+      if ((root['version'] as int) < 4) data['sense_history'] = <dynamic>[];
       if ((root['version'] as int) < 3) {
         data['import_batches'] = <dynamic>[];
         for (final row in data['senses'] as List) {
@@ -181,6 +186,11 @@ class BackupService {
           await _capture(tx),
         ); // Blocks concurrent writes until the restore commits.
         final deviceId = (await tx.query('settings')).single['device_id'];
+        // Replacing the library is not an edit; history comes from the backup.
+        await tx.insert('sync_meta', {
+          'key': 'history_off',
+          'value': '1',
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
         for (final table in tables.reversed) {
           await tx.delete(table);
         }
@@ -193,6 +203,7 @@ class BackupService {
         }
         // Older backups carry random IDs; sync relies on deterministic ones.
         await Ids.normalize(tx);
+        await tx.delete('sync_meta', where: "key='history_off'");
         final invalidCards = await tx.rawQuery("""
           SELECT c.id FROM cards c JOIN senses s ON s.id=c.sense_id
           WHERE s.status!='approved' OR c.interval_days NOT BETWEEN 1 AND 365

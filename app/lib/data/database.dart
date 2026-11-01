@@ -8,13 +8,17 @@ import 'package:uuid/uuid.dart';
 
 import 'ids.dart';
 
+DatabaseFactory get appDatabaseFactory => Platform.isAndroid || Platform.isIOS
+    ? mobile.databaseFactory
+    : databaseFactoryFfi;
+
 Future<Database> openAppDatabase() async {
   final dir = await getApplicationSupportDirectory();
   await dir.create(recursive: true);
-  final factory = Platform.isAndroid || Platform.isIOS
-      ? mobile.databaseFactory
-      : databaseFactoryFfi;
-  return openVocabularyDatabase(factory, p.join(dir.path, 'vocabulary.db'));
+  return openVocabularyDatabase(
+    appDatabaseFactory,
+    p.join(dir.path, 'vocabulary.db'),
+  );
 }
 
 Future<Database> openVocabularyDatabase(
@@ -25,7 +29,7 @@ Future<Database> openVocabularyDatabase(
   path,
   options: OpenDatabaseOptions(
     singleInstance: singleInstance,
-    version: 4,
+    version: 5,
     onConfigure: (db) async {
       await db.execute('PRAGMA foreign_keys = ON');
       // This pragma returns a row; Android's execSQL rejects that, so query it.
@@ -37,6 +41,7 @@ Future<Database> openVocabularyDatabase(
         ...passageSchemaStatements,
         ...importSchemaStatements,
         ...syncSchemaStatements,
+        ...historySchemaStatements,
       ]) {
         await db.execute(statement);
       }
@@ -69,6 +74,11 @@ Future<Database> openVocabularyDatabase(
         // first sync seeds every row anyway.
         await Ids.normalize(db);
         for (final statement in syncSchemaStatements) {
+          await db.execute(statement);
+        }
+      }
+      if (oldVersion < 5) {
+        for (final statement in historySchemaStatements) {
           await db.execute(statement);
         }
       }
@@ -168,6 +178,7 @@ const syncTables = {
   'passage_jobs': ['id'],
   'sense_origins': ['id'],
   'import_batches': ['id'],
+  'sense_history': ['id'],
 };
 
 String syncPkSql(String table, String row) =>
@@ -181,16 +192,71 @@ final syncSchemaStatements = [
     tbl TEXT NOT NULL, pk TEXT NOT NULL, changed_at INTEGER NOT NULL,
     PRIMARY KEY(tbl, pk)) WITHOUT ROWID""",
   'CREATE TABLE sync_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
-  for (final table in syncTables.keys)
-    for (final (event, rows) in [
-      ('INSERT', ['NEW']),
-      ('UPDATE', ['OLD', 'NEW']),
-      ('DELETE', ['OLD']),
-    ])
-      """CREATE TRIGGER sync_${table}_${event.toLowerCase()}
+  // Tables that existed at DB version 4; later tables add their own triggers.
+  for (final table in syncTables.keys.take(9)) ..._syncTriggers(table),
+];
+
+List<String> _syncTriggers(String table) => [
+  for (final (event, rows) in [
+    ('INSERT', ['NEW']),
+    ('UPDATE', ['OLD', 'NEW']),
+    ('DELETE', ['OLD']),
+  ])
+    """CREATE TRIGGER sync_${table}_${event.toLowerCase()}
       AFTER $event ON $table
       WHEN (SELECT value FROM sync_meta WHERE key='applying') IS NOT '1'
       BEGIN
-        ${rows.map((r) => "DELETE FROM sync_outbox WHERE tbl='$table' AND pk=${syncPkSql(table, r)}; INSERT INTO sync_outbox VALUES('$table', ${syncPkSql(table, r)}, CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));").join('\n        ')}
+        ${rows.map((r) => "DELETE FROM sync_outbox WHERE tbl='$table' AND pk=${syncPkSql(table, r)}; INSERT INTO sync_outbox VALUES('$table', ${syncPkSql(table, r)}, $_nowMs);").join('\n        ')}
+      END""",
+];
+
+/// Closes the current version of a sense into history under a given id
+/// (params: history id, sense id); the caller queues it for sync. Used when a newer remote edit replaces an unsynced local one, which
+/// the triggers skip while applying.
+const keepLosingSenseSql = '''INSERT INTO sense_history SELECT ?, s.id,
+    s.entry_id, s.meaning, s.part_of_speech, s.pronunciation, s.note, s.status,
+    s.content_revision,
+    coalesce((SELECT max(valid_to) FROM sense_history h WHERE h.sense_id=s.id),
+      (SELECT created_at FROM entries WHERE id=s.entry_id)),
+    $_nowMs, 'update' FROM senses s WHERE s.id=?''';
+
+const _nowMs = "CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)";
+
+/// SCD Type 2 for senses: every edit or delete closes the previous version
+/// into `sense_history` (valid_from..valid_to); the live row is the open
+/// version. Rows applied from sync are skipped, because the editing device
+/// already recorded and synced the version. Restore sets `history_off`.
+final historySchemaStatements = [
+  """CREATE TABLE sense_history (
+    id TEXT PRIMARY KEY, sense_id TEXT NOT NULL, entry_id TEXT NOT NULL,
+    meaning TEXT NOT NULL, part_of_speech TEXT, pronunciation TEXT, note TEXT,
+    status TEXT NOT NULL, content_revision INTEGER NOT NULL,
+    valid_from INTEGER, valid_to INTEGER NOT NULL,
+    change TEXT NOT NULL CHECK(change IN ('update','delete')))""",
+  'CREATE INDEX sense_history_sense ON sense_history(sense_id, valid_to)',
+  ..._syncTriggers('sense_history'),
+  for (final (event, changed) in [
+    (
+      'UPDATE OF meaning, part_of_speech, pronunciation, note, status',
+      'AND (OLD.meaning IS NOT NEW.meaning OR OLD.part_of_speech IS NOT NEW.part_of_speech '
+          'OR OLD.pronunciation IS NOT NEW.pronunciation OR OLD.note IS NOT NEW.note '
+          'OR OLD.status IS NOT NEW.status)',
+    ),
+    ('DELETE', ''),
+  ])
+    """CREATE TRIGGER history_senses_${event.split(' ').first.toLowerCase()}
+      AFTER $event ON senses
+      WHEN (SELECT value FROM sync_meta WHERE key='applying') IS NOT '1'
+        AND (SELECT value FROM sync_meta WHERE key='history_off') IS NOT '1'
+        $changed
+      BEGIN
+        INSERT INTO sense_history VALUES(
+          lower(hex(randomblob(16))), OLD.id, OLD.entry_id, OLD.meaning,
+          OLD.part_of_speech, OLD.pronunciation, OLD.note, OLD.status,
+          OLD.content_revision,
+          coalesce(
+            (SELECT max(valid_to) FROM sense_history WHERE sense_id=OLD.id),
+            (SELECT created_at FROM entries WHERE id=OLD.entry_id)),
+          $_nowMs, '${event == 'DELETE' ? 'delete' : 'update'}');
       END""",
 ];

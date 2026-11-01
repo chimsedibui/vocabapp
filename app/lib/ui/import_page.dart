@@ -12,6 +12,7 @@ import '../data/import_repository.dart';
 import '../data/library_repository.dart';
 import '../domain/import_data.dart';
 import 'editors.dart';
+import 'theme.dart';
 
 List<ImportRow> _prepareRows(Map<String, Object?> args) {
   final table = args['table'] as ImportTable;
@@ -856,7 +857,12 @@ class _ImportGridState extends State<_ImportGrid> {
   }
 
   @override
-  Widget build(BuildContext context) => SingleChildScrollView(
+  Widget build(BuildContext context) {
+    _source.errorRow = AppColors.of(context).dangerSoft;
+    return _table(context);
+  }
+
+  Widget _table(BuildContext context) => SingleChildScrollView(
     scrollDirection: Axis.horizontal,
     child: SizedBox(
       width: 1180,
@@ -887,6 +893,7 @@ class _ImportGridState extends State<_ImportGrid> {
 class _ImportSource extends DataTableSource {
   _ImportSource(this.grid);
   _ImportGrid grid;
+  Color errorRow = AppColors.light.dangerSoft;
   void update(_ImportGrid value) {
     grid = value;
     notifyListeners();
@@ -906,7 +913,7 @@ class _ImportSource extends DataTableSource {
     return DataRow.byIndex(
       index: index,
       selected: grid.selected.contains(r.number),
-      color: c.valid ? null : WidgetStateProperty.all(const Color(0xffffefed)),
+      color: c.valid ? null : WidgetStateProperty.all(errorRow),
       onSelectChanged: grid.busy
           ? null
           : (v) => grid.onSelect(r.number, v ?? false),

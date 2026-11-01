@@ -62,6 +62,24 @@ class Vocabulary {
   final String? partOfSpeech, pronunciation;
 }
 
+/// A closed SCD Type 2 version of a sense.
+class SenseVersion {
+  const SenseVersion({
+    required this.meaning,
+    required this.status,
+    required this.validTo,
+    required this.deleted,
+    this.validFrom,
+    this.partOfSpeech,
+    this.pronunciation,
+  });
+  final String meaning, status;
+  final String? partOfSpeech, pronunciation;
+  final DateTime? validFrom;
+  final DateTime validTo;
+  final bool deleted;
+}
+
 class StudyCard {
   const StudyCard({
     required this.id,
