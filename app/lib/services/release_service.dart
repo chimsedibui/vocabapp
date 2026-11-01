@@ -35,41 +35,37 @@ class ReleaseService {
     return false;
   }
 
+  /// Reads the CI-published `release.json` of the latest release. The
+  /// github.com download redirect has no API rate limit, unlike
+  /// api.github.com (60 requests/hour per IP without a token).
   Future<AppRelease?> latest(String current) async {
     try {
       final response = await _client
           .get(
             Uri.parse(
-              'https://api.github.com/repos/$repository/releases/latest',
+              'https://github.com/$repository/releases/latest/download/release.json',
             ),
-            headers: {'Accept': 'application/vnd.github+json'},
           )
           .timeout(const Duration(seconds: 20));
       if (response.statusCode == 404) return null;
       if (response.statusCode != 200) throw const FormatException();
       final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final tag = data['tag_name'] as String;
-      if (!newer(tag, current)) return null;
-      if (data['draft'] != false || data['prerelease'] != false) {
-        throw const FormatException();
-      }
-      final expectedPage = 'https://github.com/$repository/releases/tag/$tag';
-      if (data['html_url'] != expectedPage) throw const FormatException();
+      final version = data['version'] as String;
+      if (_version(version) == null) throw const FormatException();
+      if (!newer(version, current)) return null;
+      final page = 'https://github.com/$repository/releases/tag/v$version';
+      final download =
+          'https://github.com/$repository/releases/download/v$version';
       final assets = <String, Uri>{};
-      for (final asset in data['assets'] as List) {
-        final name = asset['name'] as String,
-            url = asset['browser_download_url'] as String;
-        if (url ==
-                'https://github.com/$repository/releases/download/$tag/$name' &&
+      for (final asset in (data['assets'] as Map).values) {
+        final name = asset['name'] as String, url = asset['url'] as String;
+        if (url == '$download/$name' &&
             RegExp(r'^[a-zA-Z0-9._-]+$').hasMatch(name)) {
           assets[name] = Uri.parse(url);
+          assets['$name.sha256'] = Uri.parse('$url.sha256');
         }
       }
-      return AppRelease(
-        tag.replaceFirst(RegExp('^v'), ''),
-        Uri.parse(expectedPage),
-        assets,
-      );
+      return AppRelease(version, Uri.parse(page), assets);
     } catch (_) {
       throw const UserFacingException(
         'Chưa kiểm tra được bản mới. Hãy thử lại khi có mạng hoặc mở trang phát hành.',

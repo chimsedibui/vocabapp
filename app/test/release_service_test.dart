@@ -17,32 +17,36 @@ void main() {
     'only accepts release and download URLs from the configured repository',
     () async {
       final service = ReleaseService(
-        client: MockClient(
-          (request) async => http.Response(
+        client: MockClient((request) async {
+          expect(
+            request.url.toString(),
+            'https://github.com/chimsedibui/vocabapp/releases/latest/download/release.json',
+          );
+          return http.Response(
             jsonEncode({
-              'tag_name': 'v0.3.0',
-              'draft': false,
-              'prerelease': false,
-              'html_url':
-                  'https://github.com/chimsedibui/vocabapp/releases/tag/v0.3.0',
-              'assets': [
-                {
+              'version': '0.3.0',
+              'assets': {
+                'android-arm64': {
                   'name': 'app.apk',
-                  'browser_download_url': 'https://github.com/chimsedibui/vocabapp/releases/download/v0.3.0/app.apk',
+                  'url': 'https://github.com/chimsedibui/vocabapp/releases/download/v0.3.0/app.apk',
                 },
-                {
-                  'name': 'bad.apk',
-                  'browser_download_url': 'https://untrusted.example/app.apk',
+                'windows-x64': {
+                  'name': 'bad.zip',
+                  'url': 'https://untrusted.example/bad.zip',
                 },
-              ],
+              },
             }),
             200,
-          ),
-        ),
+          );
+        }),
       );
       final release = await service.latest('0.2.0');
       expect(release!.version, '0.3.0');
-      expect(release.assets.keys, ['app.apk']);
+      expect(release.assets.keys, ['app.apk', 'app.apk.sha256']);
+      expect(
+        release.page.toString(),
+        'https://github.com/chimsedibui/vocabapp/releases/tag/v0.3.0',
+      );
       service.close();
     },
   );
