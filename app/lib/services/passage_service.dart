@@ -175,7 +175,7 @@ class PassageService {
       try {
         final seconds = ((120000 - clock.elapsedMilliseconds) / 1000)
             .floor()
-            .clamp(1, 40);
+            .clamp(1, config.provider == AiProvider.gemini ? 90 : 40);
         final response = await _send(
           client,
           request,
@@ -265,7 +265,11 @@ class PassageService {
         'model': config.model,
         // Gemini's OpenAI-compatible endpoint rejects unknown fields like store.
         if (config.provider != AiProvider.gemini) 'store': false,
-        'max_completion_tokens': 2500,
+        'max_completion_tokens': config.maxOutputTokens(
+          request.estimatedInputTokens,
+        ),
+        if (config.provider == AiProvider.gemini)
+          'reasoning_effort': config.reasoning.name,
         'messages': [
           {'role': 'system', 'content': request.instruction},
           {'role': 'user', 'content': request.text},
