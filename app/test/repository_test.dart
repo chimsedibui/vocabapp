@@ -202,21 +202,20 @@ void main() {
     },
   );
 
-  test('daily new limit resets at Vietnam midnight and does not suppress due reviews', () async {
-    await repo.setDailyLimit(1);
-    await add('one');
-    await add('two');
-    final queue = await repo.studyQueue();
-    expect(queue.length, 1);
-    await repo.review(queue.single, Rating.again, 'today');
-    expect((await repo.stats()).newRemaining, 0);
-    expect(await repo.studyQueue(), isEmpty);
-    now = DateTime.utc(2026, 10, 19, 17, 0); // next day in Vietnam
-    expect((await repo.stats()).newRemaining, 1);
-    expect((await repo.stats()).reviewedToday, 0);
-    now = now.add(const Duration(minutes: 10));
-    await repo.setDailyLimit(0);
-    expect((await repo.studyQueue()).single.id, queue.single.id);
+  test('new cards have no daily cap', () async {
+    for (var i = 0; i < 25; i++) {
+      await add('word$i');
+    }
+    var studied = 0;
+    for (var round = 0; round < 3; round++) {
+      final queue = await repo.studyQueue();
+      for (final card in queue) {
+        await repo.review(card, Rating.good, 'event-$round-${card.id}');
+        studied++;
+      }
+    }
+    expect(studied, 25);
+    expect((await repo.stats()).fresh, 0);
   });
 
   test(

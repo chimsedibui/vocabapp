@@ -14,8 +14,9 @@ import 'release_service.dart';
 ///
 /// - Android: the APK goes through `PackageInstaller` (`MainActivity.kt`,
 ///   channel `vocabapp/update`); Android asks the user to confirm.
-/// - Windows: `Setup.exe` runs silently after the app has quit and reopens
-///   the app when done (`installer/VocabApp.iss`).
+/// - Windows: `Setup.exe` starts silently, waits for the app to quit and
+///   reopens it when done (`installer/VocabApp.iss`); its log is written next
+///   to the download as `setup.log`.
 class AppUpdater {
   AppUpdater({http.Client? client}) : _client = client ?? http.Client();
   final http.Client _client;
@@ -107,15 +108,13 @@ class AppUpdater {
       await _channel.invokeMethod('installApk', {'path': file.path});
       return;
     }
-    final setup = file.path.replaceAll("'", "''");
-    await Process.start('powershell.exe', [
-      '-NoProfile',
-      '-NonInteractive',
-      '-WindowStyle',
-      'Hidden',
-      '-Command',
-      'Wait-Process -Id $pid -Timeout 60 -ErrorAction SilentlyContinue; '
-          "Start-Process -FilePath '$setup' -ArgumentList '/SILENT','/SUPPRESSMSGBOXES','/NORESTART'",
+    // Started directly: a detached powershell.exe gets no console and exits
+    // without running its command, so the old Wait-Process wrapper never ran.
+    await Process.start(file.path, [
+      '/SILENT',
+      '/SUPPRESSMSGBOXES',
+      '/NORESTART',
+      '/LOG=${p.join(file.parent.path, 'setup.log')}',
     ], mode: ProcessStartMode.detached);
     await quit();
   }

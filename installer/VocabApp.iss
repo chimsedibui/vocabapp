@@ -19,8 +19,6 @@ OutputBaseFilename=VocabApp-{#MyAppVersion}-Setup
 Compression=lzma2
 SolidCompression=yes
 CloseApplications=yes
-; The app keeps running in the tray; the mutex lets Setup detect and close it.
-AppMutex=VocabApp.SingleInstance
 RestartApplications=no
 UninstallDisplayIcon={app}\vocabapp.exe
 [Tasks]
@@ -36,3 +34,43 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: 
 [Run]
 ; No skipifsilent: the silent in-app update (AppUpdater) reopens the app this way.
 Filename: "{app}\vocabapp.exe"; Description: "Open VocabApp"; Flags: nowait postinstall
+[Code]
+const
+  AppMutexName = 'VocabApp.SingleInstance';
+
+{ The app keeps running in the tray and holds this mutex. The in-app updater
+  starts Setup and then quits, so a silent update waits for it to exit. }
+function InitializeSetup(): Boolean;
+var
+  Waited: Integer;
+begin
+  Waited := 0;
+  while CheckForMutexes(AppMutexName) do
+  begin
+    if WizardSilent then
+    begin
+      if Waited >= 60000 then
+      begin
+        Result := False;
+        Exit;
+      end;
+      Sleep(500);
+      Waited := Waited + 500;
+    end
+    else if MsgBox('VocabApp is running. Quit it from the tray icon, then click OK.',
+      mbConfirmation, MB_OKCANCEL) = IDCANCEL then
+    begin
+      Result := False;
+      Exit;
+    end;
+  end;
+  Result := True;
+end;
+
+function InitializeUninstall(): Boolean;
+begin
+  Result := True;
+  while Result and CheckForMutexes(AppMutexName) do
+    Result := MsgBox('VocabApp is running. Quit it from the tray icon, then click OK.',
+      mbConfirmation, MB_OKCANCEL) = IDOK;
+end;

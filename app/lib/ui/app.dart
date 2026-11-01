@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 
@@ -131,10 +130,9 @@ class _VocabAppState extends State<VocabApp> {
 }
 
 class _Overview {
-  const _Overview(this.stats, this.decks, this.dailyLimit);
+  const _Overview(this.stats, this.decks);
   final StudyStats stats;
   final List<Deck> decks;
-  final int dailyLimit;
 }
 
 class LibraryHome extends StatefulWidget {
@@ -207,11 +205,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     }
   }
 
-  Future<_Overview> _load() async => _Overview(
-    await repo.stats(),
-    await repo.decks(),
-    (await repo.settings())['daily_new_limit'] as int,
-  );
+  Future<_Overview> _load() async =>
+      _Overview(await repo.stats(), await repo.decks());
 
   Future<void> _refresh() async {
     final gen = ++_overviewGen;
@@ -585,7 +580,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
             Text(
               empty
                   ? 'Thêm từ và nghĩa bạn muốn học. Thư viện được lưu ngay trên thiết bị.'
-                  : '${s.due} thẻ đến hạn · ${min(s.fresh, s.newRemaining)} từ mới có thể học trong toàn thư viện.',
+                  : '${s.due} thẻ đến hạn · ${s.fresh} từ mới có thể học trong toàn thư viện.',
             ),
             const SizedBox(height: 20),
             if (empty)
@@ -1022,31 +1017,6 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
 
   Widget _settings(_Overview data) {
     final left = [
-      _section(
-        'Từ mới mỗi ngày',
-        'Đặt 0 nếu chỉ muốn ôn từ cũ. Thẻ đến hạn không bị giới hạn bởi số này.',
-        [
-          DropdownButtonFormField<int>(
-            isExpanded: true,
-            key: ValueKey(data.dailyLimit),
-            initialValue: data.dailyLimit,
-            decoration: const InputDecoration(labelText: 'Giới hạn'),
-            items:
-                ({0, 5, 10, 15, 20, 30, 50, 100, data.dailyLimit}.toList()
-                      ..sort())
-                    .map(
-                      (n) => DropdownMenuItem(
-                        value: n,
-                        child: Text('$n từ mới / ngày'),
-                      ),
-                    )
-                    .toList(),
-            onChanged: (v) {
-              if (v != null) _action(() => repo.setDailyLimit(v));
-            },
-          ),
-        ],
-      ),
       if (widget.uiScale != null) _displayCard(widget.uiScale!),
       _section(
         'Thư viện riêng trên thiết bị',
