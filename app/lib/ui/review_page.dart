@@ -14,8 +14,8 @@ import 'word_details.dart';
 /// Flashcard session.
 ///
 /// - Tap the card or press Space to flip it, both ways.
-/// - Swipe or use ←/→ to move between cards. Rated cards stay viewable; an
-///   unrated card that is skipped moves to the end of the session.
+/// - Swipe or use ←/→ to move between cards. Rated cards stay viewable;
+///   skipped ones are offered again on the summary.
 /// - 1–4 (or the buttons) rate a card once it has been flipped.
 class ReviewPage extends StatefulWidget {
   const ReviewPage({super.key, required this.repository, this.deckId});
@@ -84,16 +84,16 @@ class _ReviewPageState extends State<ReviewPage> {
       _error = null;
       _flipped = false;
       _direction = step;
-      if (step < 0) {
-        if (_index > 0) _index--;
-      } else if (_rated.containsKey(card.id)) {
-        _index++;
-      } else if (_index < cards.length - 1) {
-        // Skipped: see it again at the end of the session.
-        cards.add(cards.removeAt(_index));
-      }
+      // Past the last card is the summary, which offers skipped cards again.
+      _index = (_index + step).clamp(0, cards.length);
     });
   }
+
+  /// Unrated cards, in session order.
+  List<int> get _skipped => [
+    for (final (i, c) in (_cards ?? const <StudyCard>[]).indexed)
+      if (!_rated.containsKey(c.id)) i,
+  ];
 
   Future<void> _rate(Rating rating) async {
     final card = _card;
@@ -115,7 +115,11 @@ class _ReviewPageState extends State<ReviewPage> {
           _saving = false;
           _flipped = false;
           _direction = 1;
-          _index++;
+          // Next unrated card; the summary when none are left after this one.
+          _index = _skipped.firstWhere(
+            (i) => i > _index,
+            orElse: () => _cards!.length,
+          );
         });
       }
     } catch (e) {
@@ -257,7 +261,7 @@ class _ReviewPageState extends State<ReviewPage> {
         children: [
           Text('THẺ ${_index + 1} / ${cards.length}'),
           const Spacer(),
-          Text('Đã đánh giá ${_rated.length}'),
+          Text('Đã lật ${_events.length} · Đã đánh giá ${_rated.length}'),
         ],
       ),
       const SizedBox(height: 10),
@@ -445,9 +449,7 @@ class _ReviewPageState extends State<ReviewPage> {
           label: Text(_flipped ? 'Xem mặt trước' : 'Xem nghĩa'),
         ),
       IconButton(
-        tooltip: _rated.containsKey(_card!.id)
-            ? 'Thẻ tiếp (→)'
-            : 'Bỏ qua, xem lại cuối phiên (→)',
+        tooltip: _rated.containsKey(_card!.id) ? 'Thẻ tiếp (→)' : 'Bỏ qua (→)',
         onPressed: !_saving ? () => _go(1) : null,
         icon: const Icon(Icons.chevron_right),
       ),
@@ -474,8 +476,10 @@ class _ReviewPageState extends State<ReviewPage> {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 12),
-          const Text(
-            'Nghỉ một chút. Những từ chưa nhớ sẽ trở lại khi đến hạn.',
+          Text(
+            _skipped.isEmpty
+                ? 'Nghỉ một chút. Những từ chưa nhớ sẽ trở lại khi đến hạn.'
+                : 'Còn ${_skipped.length} thẻ đã bỏ qua, chưa đánh giá.',
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
@@ -484,6 +488,14 @@ class _ReviewPageState extends State<ReviewPage> {
             runSpacing: 12,
             alignment: WrapAlignment.center,
             children: [
+              if (_skipped.isNotEmpty)
+                FilledButton(
+                  onPressed: () => setState(() {
+                    _index = _skipped.first;
+                    _direction = 1;
+                  }),
+                  child: Text('Học ${_skipped.length} thẻ đã bỏ qua'),
+                ),
               if (cards.isNotEmpty) ...[
                 OutlinedButton(
                   onPressed: () => setState(() {
