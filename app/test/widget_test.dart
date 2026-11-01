@@ -83,9 +83,18 @@ void main() {
     await tester.drag(find.text('retain'), const Offset(-300, 0));
     await tester.pumpAndSettle();
     expect(find.text('resilient'), findsOneWidget);
+    expect(find.text('THẺ 2 / 2'), findsOneWidget);
     await tester.tap(find.text('resilient'));
     await tester.pumpAndSettle();
     expect(find.text('kiên cường'), findsOneWidget);
+    expect(find.text('THẺ 2 / 2'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(find.text('Học 1 thẻ đã bỏ qua'), findsOneWidget);
+    await tester.tap(find.text('Học 1 thẻ đã bỏ qua'));
+    await tester.pumpAndSettle();
+    expect(find.text('THẺ 2 / 2'), findsOneWidget);
+    expect(find.text('Đã lật 2 · Đã đánh giá 1'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 
