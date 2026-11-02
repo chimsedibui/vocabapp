@@ -307,4 +307,65 @@ void main() {
       await dir.delete(recursive: true);
     },
   );
+
+  test(
+    'undo restores the card and drops the event; a later change blocks it',
+    () async {
+      await add('retain');
+      final card = (await repo.studyQueue()).single;
+      await repo.review(card, Rating.good, 'e1');
+      final back = await repo.undoReview(card, 'e1');
+      expect(await db.query('review_events'), isEmpty);
+      final row = (await db.query('cards')).single;
+      expect(row['state'], 'new');
+      expect(row['due_at'], isNull);
+      expect(row['last_review_id'], isNull);
+      expect(back.revision, row['revision']);
+      await repo.review(back, Rating.again, 'e2');
+      await expectLater(
+        repo.undoReview(card, 'e2'),
+        throwsA(isA<UserFacingException>()),
+      );
+    },
+  );
+
+  test(
+    'deleting the last meaning removes the word, card and history',
+    () async {
+      await add('retain', key: 'a');
+      await add('retain', key: 'b', meaning: 'giữ');
+      await repo.review((await repo.studyQueue()).first, Rating.good, 'e1');
+      final senses = await repo.vocabulary();
+      expect(senses, hasLength(2));
+      for (final sense in senses) {
+        await repo.deleteSense(sense.senseId);
+      }
+      for (final table in [
+        'entries',
+        'senses',
+        'cards',
+        'review_events',
+        'deck_entries',
+      ]) {
+        expect(await db.query(table), isEmpty, reason: table);
+      }
+    },
+  );
+
+  test('stats: stages, streak and last week', () async {
+    await add('a');
+    await add('b');
+    final queue = await repo.studyQueue();
+    await repo.review(queue[0], Rating.good, 'd0');
+    now = now.add(const Duration(days: 1));
+    await repo.review(queue[1], Rating.again, 'd1');
+    final s = await repo.stats();
+    expect((s.fresh, s.learning, s.mature), (0, 1, 1));
+    expect(s.streak, 2);
+    expect(s.lastWeek, [0, 0, 0, 0, 0, 1, 1]);
+    now = now.add(const Duration(days: 1));
+    expect((await repo.stats()).streak, 2, reason: 'today not studied yet');
+    now = now.add(const Duration(days: 1));
+    expect((await repo.stats()).streak, 0);
+  });
 }

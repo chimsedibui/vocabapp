@@ -12,7 +12,7 @@ Ngày 19/10/2026. Bản code đầu tiên: **offline alpha 0.1.0** trong `app/`.
 | Dán danh sách | Tối đa 500 dòng, lưu nháp; gộp trùng, rollback nếu có dòng sai |
 | Nhóm | Tạo, đổi tên, ẩn; thêm/bỏ membership, không reset lịch ôn |
 | Thư viện | Tìm từ/nghĩa, lọc nhóm và bản nháp; sửa/duyệt nghĩa; tạm dừng/tiếp tục thẻ |
-| Học | Từ → lật nghĩa → Quên/Khó/Tạm/Nhớ/Dễ; thẻ đến hạn trong 1 giờ quay lại cùng phiên; desktop hỗ trợ Space và phím 1–5 |
+| Học | Từ → lật nghĩa → Quên/Khó/Tạm/Nhớ/Dễ; thẻ đến hạn trong 1 giờ quay lại cùng phiên; hoàn tác lượt cuối (Z); desktop hỗ trợ Space và phím 1–5 |
 | Lịch ôn | Scheduler v1 theo đặc tả; ưu tiên due, tối đa 20 thẻ/phiên, giới hạn từ mới 0–100/ngày |
 | Tiến độ | Ghi event và schedule cùng transaction; chống ghi trùng khi retry; bảo vệ snapshot cũ |
 | Thống kê | Số entry/sense/draft, thẻ đến hạn, hạn mức mới còn lại và lượt ôn hôm nay |

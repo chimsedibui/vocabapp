@@ -16,6 +16,7 @@ import 'word_details.dart';
 import 'review_page.dart';
 import 'ai_settings.dart';
 import 'passage_page.dart';
+import 'progress_charts.dart';
 import 'import_page.dart';
 import 'sync_settings.dart';
 import 'ui_scale.dart';
@@ -476,14 +477,19 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     final s = data.stats;
     final stats = [
       _stat('${s.due}', 'Thẻ đến hạn', Icons.schedule),
-      _stat('${s.entries}', 'Từ / cụm từ', Icons.auto_stories_outlined),
-      _stat('${s.senses}', 'Nghĩa trong thư viện', Icons.layers_outlined),
       _stat(
         '${s.reviewedToday}',
         'Lượt ôn hôm nay',
         Icons.check_circle_outline,
       ),
+      _stat(
+        '${s.streak}',
+        'Ngày học liên tiếp',
+        Icons.local_fire_department_outlined,
+      ),
+      _stat('${s.mature}', 'Thẻ đã thuộc', Icons.verified_outlined),
     ];
+    final progress = _progressCard(s);
     final drafts = s.drafts == 0
         ? null
         : Card(
@@ -529,6 +535,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
                           maxColumns: 2,
                           children: stats,
                         ),
+                        const SizedBox(height: 12),
+                        progress,
                         if (drafts != null) ...[
                           const SizedBox(height: 12),
                           drafts,
@@ -542,6 +550,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
               hero,
               const SizedBox(height: 16),
               ResponsiveGrid(minTileWidth: 120, children: stats),
+              const SizedBox(height: 16),
+              progress,
               if (drafts != null) ...[const SizedBox(height: 16), drafts],
             ],
             const SizedBox(height: 24),
@@ -562,9 +572,32 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     );
   }
 
+  Widget _progressCard(StudyStats s) => Card(
+    margin: EdgeInsets.zero,
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Tiến độ thẻ', style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 10),
+          CardMix(fresh: s.fresh, learning: s.learning, mature: s.mature),
+          const SizedBox(height: 20),
+          Text(
+            'Lượt ôn 7 ngày qua',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: 8),
+          WeekBars(counts: s.lastWeek, today: repo.clock()),
+        ],
+      ),
+    ),
+  );
+
   Widget _heroCard(_Overview data) {
     final s = data.stats;
     final empty = s.senses == 0;
+    final nothing = s.due == 0 && s.fresh == 0;
     return Card(
       margin: EdgeInsets.zero,
       color: AppColors.of(context).raisedTinted,
@@ -581,6 +614,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
             Text(
               empty
                   ? 'Thêm từ và nghĩa bạn muốn học. Thư viện được lưu ngay trên thiết bị.'
+                  : nothing
+                  ? 'Đã học hết thẻ đến hạn. Nghỉ một chút nhé.'
                   : '${s.due} thẻ đến hạn · ${s.fresh} từ mới có thể học trong toàn thư viện.',
             ),
             const SizedBox(height: 20),
@@ -602,9 +637,11 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   FilledButton.icon(
-                    onPressed: _study,
-                    icon: const Icon(Icons.play_arrow_rounded),
-                    label: const Text('Học ngay'),
+                    onPressed: nothing ? null : _study,
+                    icon: Icon(
+                      nothing ? Icons.check_rounded : Icons.play_arrow_rounded,
+                    ),
+                    label: Text(nothing ? 'Hết thẻ lúc này' : 'Học ngay'),
                   ),
                   TextButton(
                     onPressed: () => _edit(data),
@@ -921,6 +958,11 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           await _action(() => repo.setSuspended(word.senseId, !word.suspended));
         case 'remove':
           await _action(() => repo.removeFromDeck(word.entryId, _deck!));
+        case 'delete':
+          if (await _confirmDelete(word)) {
+            await _action(() => repo.deleteSense(word.senseId));
+            _message('Đã xóa “${word.term}”.');
+          }
         case 'attach':
           final id = await showDialog<String>(
             context: context,
@@ -954,8 +996,45 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           value: 'remove',
           child: Text('Bỏ từ khỏi nhóm này'),
         ),
+      const PopupMenuDivider(),
+      PopupMenuItem(
+        value: 'delete',
+        child: Text(
+          'Xóa khỏi thư viện',
+          style: TextStyle(color: AppColors.of(context).danger),
+        ),
+      ),
     ],
   );
+
+  Future<bool> _confirmDelete(Vocabulary word) async =>
+      await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('Xóa “${word.term}”?'),
+          content: Text(
+            [
+              if (word.meaning.isNotEmpty) 'Nghĩa: ${word.meaning}',
+              'Thẻ và lịch sử ôn của nghĩa này sẽ bị xóa trên mọi máy đồng bộ. '
+                  'Chỉ lấy lại được bằng bản sao lưu.',
+            ].join('\n\n'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Hủy'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.of(context).danger,
+              ),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Xóa'),
+            ),
+          ],
+        ),
+      ) ??
+      false;
 
   Widget _section(String title, String body, List<Widget> children) => Card(
     margin: EdgeInsets.zero,
@@ -1021,7 +1100,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       if (widget.uiScale != null) _displayCard(widget.uiScale!),
       _section(
         'Thư viện riêng trên thiết bị',
-        'Ngôn ngữ: Anh → Việt\nNgày học: múi giờ Việt Nam (UTC+7)\nMỗi phiên: tối đa 20 thẻ\n\nThư viện được lưu trên thiết bị. Sao lưu để giữ tiến độ trước khi chuyển máy; đồng bộ tự động chưa được bật.',
+        'Ngôn ngữ: Anh → Việt\nNgày học: múi giờ Việt Nam (UTC+7)\nMỗi phiên: tối đa 20 thẻ\n\nThư viện được lưu trên thiết bị và đồng bộ giữa các máy khi bật mục Đồng bộ. Sao lưu vẫn nên làm định kỳ.',
         const [],
       ),
     ];

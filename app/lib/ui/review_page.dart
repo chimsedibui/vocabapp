@@ -18,7 +18,8 @@ import 'word_details.dart';
 /// - Tap the card or press Space to flip it, both ways.
 /// - Swipe or use ←/→ to move between cards. Rated cards stay viewable;
 ///   skipped ones are offered again on the summary.
-/// - 1–5 (or the buttons) rate a card once it has been flipped.
+/// - 1–5 (or the buttons) rate a card once it has been flipped; Z undoes the
+///   last rating.
 /// - A card due again within [requeueWithin] comes back later in the same
 ///   session, after the other cards, once its time is up.
 class ReviewPage extends StatefulWidget {
@@ -57,6 +58,9 @@ class _ReviewPageState extends State<ReviewPage> {
 
   /// When requeued slots become due.
   final _dueAt = <int, DateTime>{};
+
+  /// The last rating, while it can still be undone.
+  ({int slot, StudyCard before, String event, int? requeued})? _last;
   String? _error;
   Timer? _tick;
 
@@ -102,6 +106,7 @@ class _ReviewPageState extends State<ReviewPage> {
           _rated.clear();
           _events.clear();
           _dueAt.clear();
+          _last = null;
         });
       }
     } catch (e) {
@@ -177,24 +182,28 @@ class _ReviewPageState extends State<ReviewPage> {
       if (mounted) {
         setState(() {
           _rated[_index] = rating;
+          int? requeued;
           if (next != null &&
               next.due.difference(DateTime.now()) <= ReviewPage.requeueWithin) {
-            _dueAt[_cards!.length] = next.due;
+            requeued = _cards!.length;
+            _dueAt[requeued] = next.due;
             _cards!.add(
-              StudyCard(
-                id: card.id,
-                term: card.term,
-                meaning: card.meaning,
-                senseKey: card.senseKey,
+              card.copyWith(
                 state: next.state,
                 intervalDays: next.intervalDays,
                 lapses: next.lapses,
                 revision: card.revision + 1,
-                partOfSpeech: card.partOfSpeech,
-                pronunciation: card.pronunciation,
               ),
             );
           }
+          _last = next == null
+              ? null
+              : (
+                  slot: _index,
+                  before: card,
+                  event: _events[_index]!,
+                  requeued: requeued,
+                );
           _saving = false;
           _flipped = false;
           _direction = 1;
@@ -210,6 +219,45 @@ class _ReviewPageState extends State<ReviewPage> {
         setState(() {
           _error = friendlyError(e);
           _saving = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _undo() async {
+    final last = _last;
+    if (last == null || _saving) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      final card = await widget.repository.undoReview(last.before, last.event);
+      widget.sync?.requestSync();
+      if (mounted) {
+        setState(() {
+          // The requeued copy is always the newest slot.
+          if (last.requeued case final slot? when slot == _cards!.length - 1) {
+            _cards!.removeLast();
+            _dueAt.remove(slot);
+            _events.remove(slot);
+          }
+          _cards![last.slot] = card;
+          _rated.remove(last.slot);
+          _events[last.slot] = const Uuid().v4();
+          _index = last.slot;
+          _flipped = true;
+          _direction = -1;
+          _last = null;
+          _saving = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = friendlyError(e);
+          _saving = false;
+          _last = null;
         });
       }
     }
@@ -266,6 +314,8 @@ class _ReviewPageState extends State<ReviewPage> {
         const SingleActivator(LogicalKeyboardKey.space): _flip,
         const SingleActivator(LogicalKeyboardKey.arrowLeft): () => _go(-1),
         const SingleActivator(LogicalKeyboardKey.arrowRight): () => _go(1),
+        const SingleActivator(LogicalKeyboardKey.keyZ): _undo,
+        const SingleActivator(LogicalKeyboardKey.keyZ, control: true): _undo,
         for (final (i, keys) in const [
           [LogicalKeyboardKey.digit1, LogicalKeyboardKey.numpad1],
           [LogicalKeyboardKey.digit2, LogicalKeyboardKey.numpad2],
@@ -327,9 +377,7 @@ class _ReviewPageState extends State<ReviewPage> {
                 _navigation(cards),
                 const SizedBox(height: 12),
                 Text(
-                  _touch
-                      ? 'Chạm thẻ để lật · vuốt trái/phải để chuyển thẻ'
-                      : 'Space lật thẻ · ← → chuyển thẻ · 1–5 đánh giá',
+                  _touch ? 'Chạm thẻ để lật · vuốt trái/phải để chuyển thẻ' : 'Space lật thẻ · ← → chuyển thẻ · 1–5 đánh giá · Z hoàn tác',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: AppColors.of(context).muted),
                 ),
@@ -345,9 +393,13 @@ class _ReviewPageState extends State<ReviewPage> {
     children: [
       Row(
         children: [
-          Text('THẺ ${_index + 1} / ${cards.length}'),
+          Text('Còn ${cards.length - _rated.length} thẻ'),
           const Spacer(),
-          Text('Đã lật ${_events.length} · Đã đánh giá ${_rated.length}'),
+          if (_waiting.isNotEmpty)
+            Text(
+              '${_waiting.length} thẻ chờ quay lại',
+              style: TextStyle(color: AppColors.of(context).muted),
+            ),
         ],
       ),
       const SizedBox(height: 10),
@@ -488,36 +540,43 @@ class _ReviewPageState extends State<ReviewPage> {
       Rating.good: colors.accent,
       Rating.easy: Colors.green.shade600,
     };
-    return Row(
-      children: [
-        for (final (i, r) in Rating.values.indexed) ...[
-          if (i > 0) const SizedBox(width: 8),
-          Expanded(
-            child: OutlinedButton(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: tones[r],
-                side: BorderSide(color: tones[r]!.withValues(alpha: 0.6)),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-              onPressed: _saving ? null : () => _rate(r),
-              child: Column(
-                children: [
-                  Text(
-                    r.label,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  Text(
-                    _touch
-                        ? _interval(card, r)
-                        : '${i + 1} · ${_interval(card, r)}',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
+    Widget button(int i, Rating r) => OutlinedButton(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: tones[r],
+        side: BorderSide(color: tones[r]!.withValues(alpha: 0.6)),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+      ),
+      onPressed: _saving ? null : () => _rate(r),
+      child: Column(
+        children: [
+          Text(r.label, style: const TextStyle(fontWeight: FontWeight.w600)),
+          Text(
+            _touch ? _interval(card, r) : '${i + 1} · ${_interval(card, r)}',
+            style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
+      ),
+    );
+    Widget row(Iterable<(int, Rating)> items) => Row(
+      children: [
+        for (final (n, (i, r)) in items.indexed) ...[
+          if (n > 0) const SizedBox(width: 8),
+          Expanded(child: button(i, r)),
+        ],
       ],
+    );
+    final all = Rating.values.indexed.toList();
+    // Five buttons in one row get too narrow on phones: 3 + 2 instead.
+    return LayoutBuilder(
+      builder: (context, box) => box.maxWidth >= 440
+          ? row(all)
+          : Column(
+              children: [
+                row(all.take(3)),
+                const SizedBox(height: 8),
+                row(all.skip(3)),
+              ],
+            ),
     );
   }
 
@@ -529,6 +588,12 @@ class _ReviewPageState extends State<ReviewPage> {
         onPressed: _index > 0 && !_saving ? () => _go(-1) : null,
         icon: const Icon(Icons.chevron_left),
       ),
+      if (_last != null)
+        IconButton(
+          tooltip: 'Hoàn tác lượt vừa chấm (Z)',
+          onPressed: _saving ? null : _undo,
+          icon: const Icon(Icons.undo),
+        ),
       if (_events.containsKey(_index))
         TextButton.icon(
           onPressed: _saving ? null : _flip,
@@ -593,6 +658,12 @@ class _ReviewPageState extends State<ReviewPage> {
             runSpacing: 12,
             alignment: WrapAlignment.center,
             children: [
+              if (_last != null)
+                OutlinedButton.icon(
+                  onPressed: _saving ? null : _undo,
+                  icon: const Icon(Icons.undo),
+                  label: const Text('Hoàn tác lượt cuối'),
+                ),
               if (_skipped.isNotEmpty)
                 FilledButton(
                   onPressed: () => setState(() {

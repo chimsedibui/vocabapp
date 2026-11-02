@@ -117,6 +117,8 @@ SAU KHI LẬT
         [Quên] [Khó] [Tạm] [Nhớ] [Dễ]
 ```
 
+Lượt chấm cuối có thể hoàn tác (nút ↶ hoặc phím Z): xóa review event, trả thẻ về lịch trước đó, chỉ khi thẻ chưa đổi sau lượt đó. Trên màn hẹp năm nút xếp 3 + 2.
+
 Desktop: Space hiện nghĩa, phím 1–5 đánh giá sau khi lật; không áp dụng shortcut học khi đang nhập nội dung. Android: nút chạm có nhãn, không bắt dùng vuốt. Vuốt và animation lật là cải tiến giao diện sau, không thay ý nghĩa đánh giá.
 
 Trong lúc lưu, khóa đánh giá và thoát phiên để tránh hành động chồng nhau. Mất mạng không ảnh hưởng học; lỗi ghi local giữ thẻ/đáp án hiện tại và cho thử lại. Nội dung dài phải cuộn được; không cắt mất nghĩa. Chữ 150%, focus, screen-reader labels và khả năng giảm animation thuộc tiêu chí kiểm thử UX; không chỉ dựa vào màu để phân biệt mức nhớ.

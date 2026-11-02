@@ -124,6 +124,24 @@ class StudyCard {
   final String id, term, meaning, senseKey, state;
   final int intervalDays, lapses, revision;
   final String? partOfSpeech, pronunciation;
+
+  StudyCard copyWith({
+    String? state,
+    int? intervalDays,
+    int? lapses,
+    int? revision,
+  }) => StudyCard(
+    id: id,
+    term: term,
+    meaning: meaning,
+    senseKey: senseKey,
+    state: state ?? this.state,
+    intervalDays: intervalDays ?? this.intervalDays,
+    lapses: lapses ?? this.lapses,
+    revision: revision ?? this.revision,
+    partOfSpeech: partOfSpeech,
+    pronunciation: pronunciation,
+  );
 }
 
 class StudyStats {
@@ -135,7 +153,20 @@ class StudyStats {
     required this.fresh,
     required this.reviewedToday,
     required this.nextDue,
+    this.learning = 0,
+    this.mature = 0,
+    this.streak = 0,
+    this.lastWeek = const [],
   });
   final int entries, senses, drafts, due, fresh, reviewedToday;
   final DateTime? nextDue;
+
+  /// Cards in short steps (`relearning`) and graduated (`review`).
+  final int learning, mature;
+
+  /// Consecutive study days ending today, or yesterday if today has none yet.
+  final int streak;
+
+  /// Reviews per study day, oldest first, ending today (7 values).
+  final List<int> lastWeek;
 }

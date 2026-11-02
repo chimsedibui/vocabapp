@@ -83,18 +83,17 @@ void main() {
     await tester.drag(find.text('retain'), const Offset(-300, 0));
     await tester.pumpAndSettle();
     expect(find.text('resilient'), findsOneWidget);
-    expect(find.text('THẺ 2 / 2'), findsOneWidget);
+    expect(find.text('Còn 1 thẻ'), findsOneWidget);
     await tester.tap(find.text('resilient'));
     await tester.pumpAndSettle();
     expect(find.text('kiên cường'), findsOneWidget);
-    expect(find.text('THẺ 2 / 2'), findsOneWidget);
+    expect(find.text('Còn 1 thẻ'), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pumpAndSettle();
     expect(find.text('Học 1 thẻ đã bỏ qua'), findsOneWidget);
     await tester.tap(find.text('Học 1 thẻ đã bỏ qua'));
     await tester.pumpAndSettle();
-    expect(find.text('THẺ 2 / 2'), findsOneWidget);
-    expect(find.text('Đã lật 2 · Đã đánh giá 1'), findsOneWidget);
+    expect(find.text('Còn 1 thẻ'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -114,6 +113,12 @@ void main() {
       await tester.tap(find.text('Quên'));
       await tester.pumpAndSettle();
       expect(find.textContaining('1 thẻ sẽ quay lại sau'), findsOneWidget);
+      await tester.tap(find.text('Hoàn tác lượt cuối'));
+      await tester.pumpAndSettle();
+      expect(await db.query('review_events'), isEmpty);
+      expect(find.text('giữ lại'), findsOneWidget);
+      await tester.tap(find.text('Quên'));
+      await tester.pumpAndSettle();
       await tester.pumpWidget(const SizedBox());
       expect((await db.query('cards')).single['state'], 'relearning');
     },
