@@ -68,6 +68,11 @@ class MainActivity : FlutterActivity() {
         // session that Android later reports as aborted.
         installer.mySessions.forEach { runCatching { installer.abandonSession(it.sessionId) } }
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+        // Android 12+ lets an app update itself without the confirm dialog;
+        // the system still asks when it cannot honour this (e.g. first grant).
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
+        }
         val id = installer.createSession(params)
         installer.openSession(id).use { session ->
             apk.inputStream().use { input ->

@@ -13,7 +13,8 @@ import 'release_service.dart';
 /// OS installer.
 ///
 /// - Android: the APK goes through `PackageInstaller` (`MainActivity.kt`,
-///   channel `vocabapp/update`); Android asks the user to confirm.
+///   channel `vocabapp/update`); on Android 12+ it installs without a
+///   confirm dialog (the app closes and must be reopened); older versions ask.
 /// - Windows: `Setup.exe` starts silently, waits for the app to quit and
 ///   reopens it when done (`installer/VocabApp.iss`); its log is written next
 ///   to the download as `setup.log`.
