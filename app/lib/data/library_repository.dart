@@ -549,8 +549,9 @@ class LibraryRepository {
         .toList();
   });
 
-  /// Event ID is generated on reveal and reused on retry. Review + schedule are atomic.
-  Future<void> review(StudyCard snapshot, Rating rating, String eventId) =>
+  /// Event ID is generated on reveal and reused on retry. Review + schedule are
+  /// atomic. Returns the new schedule, or null when the event was already saved.
+  Future<Schedule?> review(StudyCard snapshot, Rating rating, String eventId) =>
       db.transaction((tx) async {
         final previousEvent = await tx.query(
           'review_events',
@@ -564,7 +565,7 @@ class LibraryRepository {
               'Lượt ôn không khớp. Hãy mở lại phiên học.',
             );
           }
-          return;
+          return null;
         }
         final records = await tx.rawQuery(
           'SELECT c.*, s.content_revision, s.status FROM cards c JOIN senses s ON s.id=c.sense_id WHERE c.id=?',
@@ -626,5 +627,6 @@ class LibraryRepository {
           where: 'id=?',
           whereArgs: [snapshot.id],
         );
+        return next;
       });
 }

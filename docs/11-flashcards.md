@@ -51,13 +51,13 @@ P0 được nghiệm thu như một phần vòng học local và MVP. P1 cần �
 1. Home → chọn một nhóm hoặc tất cả → Học ngay.
 2. App lấy tối đa 20 thẻ; đến hạn trước, sau đó từ mới còn trong hạn mức.
 3. Hiện mặt trước, ẩn nghĩa; người học tự nhớ.
-4. Chọn Hiện nghĩa/Space; hiện mặt sau và bốn nút đánh giá.
-5. Chọn Quên/Khó/Nhớ/Dễ; app ghi lượt ôn và lịch mới, rồi chuyển thẻ.
+4. Chọn Hiện nghĩa/Space; hiện mặt sau và năm nút đánh giá.
+5. Chọn Quên/Khó/Tạm/Nhớ/Dễ; app ghi lượt ôn và lịch mới, rồi chuyển thẻ. Thẻ đến hạn lại trong vòng 1 giờ được xếp lại cuối phiên và hiện lại khi đến giờ.
 6. Kết thúc phiên hiển thị số lượt đã lưu. Người dùng có thể về Home hoặc mở phiên khác nếu còn thẻ.
 
 **Ngoại lệ:** không có thẻ phù hợp → thông báo rõ, không tự lấy từ nhóm khác. Hết hạn mức từ mới → vẫn cho ôn thẻ đến hạn. Thẻ lỗi/đã thay đổi → báo tải lại phiên, không ghi đè tiến độ mới. Nhấn đánh giá liên tiếp khi đang lưu → chỉ nhận một lượt.
 
-**Hậu điều kiện:** chỉ lượt đã xác nhận mới ảnh hưởng tiến độ. Thẻ Quên đến hạn sau 10 phút, không chèn lại ngay để làm sai lịch.
+**Hậu điều kiện:** chỉ lượt đã xác nhận mới ảnh hưởng tiến độ. Thẻ xếp lại trong phiên chỉ được đánh giá khi đã đến hạn; nếu chỉ còn thẻ chờ, màn kết thúc đếm ngược và tự mở thẻ khi đến giờ.
 
 ### UC-FC02 — Luyện tự do (đề xuất P1)
 
@@ -78,14 +78,15 @@ Nếu bật hai chiều, cấu hình phiên cho phép chọn một chiều hoặ
 
 Các nút là mức nhớ do người dùng tự đánh giá, không phải mức CEFR:
 
-| Nút | Cách hiểu | Thẻ mới | Thẻ đã học, interval cũ là I ngày |
+| Nút | Cách hiểu | Thẻ đang học (`new`/`relearning`, mốc I) | Thẻ đã thuộc (`review`, interval I ngày) |
 |---|---|---|---|
-| Quên | Không nhớ được nghĩa trước khi lật | Ôn lại sau 10 phút | Sau 10 phút, interval lưu về 1 ngày, tăng lapse |
-| Khó | Nhớ chậm/chưa chắc | Sau 1 ngày | Sau max(1, ceil(1.2 × I)) ngày |
-| Nhớ | Nhớ đúng trước khi lật | Sau 1 ngày | Sau max(1, 2 × I) ngày |
-| Dễ | Nhớ nhanh và chắc | Sau 4 ngày | Sau max(4, 3 × I) ngày |
+| 1 Quên | Không nhớ được nghĩa | 1 phút, I về 1 | 1 phút, I về 1, tăng lapse |
+| 2 Khó | Nhớ rất chậm/sai một phần | 10 phút | 1 giờ (`relearning`), giữ I |
+| 3 Tạm | Nhớ nhưng chưa chắc | 1 giờ | T = ceil(1.2 × I) ngày |
+| 4 Nhớ | Nhớ đúng | I ngày (thẻ mới: 1 ngày) | N = max(T + 1, 2 × I) ngày |
+| 5 Dễ | Nhớ nhanh và chắc | max(3, 2 × I) ngày | max(N + 1, 3 × I) ngày |
 
-Interval tối đa 365 ngày theo scheduler v1. Lật thẻ không tự tính là nhớ. Không tự xếp “đã thuộc vĩnh viễn” vì interval dài. Ngày/hạn mức dùng Asia/Ho_Chi_Minh; timestamp lưu UTC. Chi tiết chuẩn ở [tài liệu 03](03-functional-spec.md).
+Scheduler v2 (`scheduler_version = 2`). Bước ngắn trong ngày theo *successive relearning* (Rawson & Dunlosky 2011): một từ quay lại nhiều lần trong cùng buổi, xen giữa thẻ khác (Kornell 2009), rồi giãn dần theo ngày vì khoảng cách tối ưu tăng theo thời gian muốn nhớ (Cepeda 2008). Với thẻ đã thuộc, mỗi nút luôn dài hơn nút trước. Interval tối đa 365 ngày. Lật thẻ không tự tính là nhớ. Không tự xếp “đã thuộc vĩnh viễn” vì interval dài. Ngày/hạn mức dùng Asia/Ho_Chi_Minh; timestamp lưu UTC. Chi tiết chuẩn ở [tài liệu 03](03-functional-spec.md).
 
 Mở lại một phiên không bắt đầu lại lịch ôn: thẻ vừa được đánh giá chỉ trở lại khi đủ điều kiện. Alpha dựng lại queue; lưu/khôi phục chính xác một snapshot phiên là khả năng bổ sung, không phải hành vi đã có.
 
@@ -113,10 +114,10 @@ TRƯỚC KHI LẬT
 SAU KHI LẬT
                     retain
                    giữ lại
-          [Quên] [Khó] [Nhớ] [Dễ]
+        [Quên] [Khó] [Tạm] [Nhớ] [Dễ]
 ```
 
-Desktop: Space hiện nghĩa, phím 1–4 đánh giá sau khi lật; không áp dụng shortcut học khi đang nhập nội dung. Android: nút chạm có nhãn, không bắt dùng vuốt. Vuốt và animation lật là cải tiến giao diện sau, không thay ý nghĩa đánh giá.
+Desktop: Space hiện nghĩa, phím 1–5 đánh giá sau khi lật; không áp dụng shortcut học khi đang nhập nội dung. Android: nút chạm có nhãn, không bắt dùng vuốt. Vuốt và animation lật là cải tiến giao diện sau, không thay ý nghĩa đánh giá.
 
 Trong lúc lưu, khóa đánh giá và thoát phiên để tránh hành động chồng nhau. Mất mạng không ảnh hưởng học; lỗi ghi local giữ thẻ/đáp án hiện tại và cho thử lại. Nội dung dài phải cuộn được; không cắt mất nghĩa. Chữ 150%, focus, screen-reader labels và khả năng giảm animation thuộc tiêu chí kiểm thử UX; không chỉ dựa vào màu để phân biệt mức nhớ.
 

@@ -175,7 +175,8 @@ void main() {
     await repo.review(card, Rating.again, 'same-event');
     await repo.review(card, Rating.again, 'same-event');
     expect((await db.query('review_events')).length, 1);
-    expect((await db.query('cards')).single['lapses'], 1);
+    // A card still being learned does not lapse.
+    expect((await db.query('cards')).single['lapses'], 0);
     await expectLater(
       repo.review(card, Rating.easy, 'another-event'),
       throwsA(isA<UserFacingException>()),
