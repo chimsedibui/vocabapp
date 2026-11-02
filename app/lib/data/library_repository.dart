@@ -19,9 +19,10 @@ class LibraryRepository {
   Future<Map<String, Object?>> settings() async =>
       (await db.query('settings')).single;
 
-  String _studyDay(DateTime now, String timezone) {
+  String _studyDay(DateTime now, String timezone, {int daysAgo = 0}) {
     final local = tz.TZDateTime.from(now, tz.getLocation(timezone));
-    return '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')}';
+    final date = DateTime.utc(local.year, local.month, local.day - daysAgo);
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
   Future<List<Deck>> decks({bool includeArchived = false}) async {
@@ -68,6 +69,41 @@ class LibraryRepository {
       whereArgs: [entryId, deckId],
     );
   }
+
+  /// Deletes one meaning with its card and review history; the word goes too
+  /// when this was its last meaning. Deletions sync as tombstones.
+  Future<void> deleteSense(String senseId) => db.transaction((tx) async {
+    final sense = await tx.query(
+      'senses',
+      columns: ['entry_id'],
+      where: 'id=?',
+      whereArgs: [senseId],
+    );
+    if (sense.isEmpty) return;
+    final entryId = sense.single['entry_id'] as String;
+    await tx.delete(
+      'review_events',
+      where: 'card_id IN (SELECT id FROM cards WHERE sense_id=?)',
+      whereArgs: [senseId],
+    );
+    await tx.delete('cards', where: 'sense_id=?', whereArgs: [senseId]);
+    await tx.delete('sense_origins', where: 'sense_id=?', whereArgs: [senseId]);
+    await tx.delete('senses', where: 'id=?', whereArgs: [senseId]);
+    final left = await tx.query(
+      'senses',
+      where: 'entry_id=?',
+      whereArgs: [entryId],
+      limit: 1,
+    );
+    if (left.isEmpty) {
+      await tx.delete(
+        'deck_entries',
+        where: 'entry_id=?',
+        whereArgs: [entryId],
+      );
+      await tx.delete('entries', where: 'id=?', whereArgs: [entryId]);
+    }
+  });
 
   Future<void> attachToDeck(String entryId, String deckId) async {
     await db.transaction((tx) async {
@@ -486,12 +522,34 @@ class LibraryRepository {
       (SELECT count(*) FROM senses) senses,
       (SELECT count(*) FROM senses WHERE status='draft') drafts,
       (SELECT count(*) FROM cards WHERE suspended=0 AND state='new') fresh,
+      (SELECT count(*) FROM cards WHERE suspended=0 AND state='relearning') learning,
+      (SELECT count(*) FROM cards WHERE suspended=0 AND state='review') mature,
       (SELECT count(*) FROM cards WHERE suspended=0 AND state!='new' AND due_at<=?) due,
       (SELECT count(*) FROM review_events WHERE study_day=?) reviews,
       (SELECT min(due_at) FROM cards WHERE suspended=0 AND state!='new' AND due_at>?) next_due''',
       [now.millisecondsSinceEpoch, day, now.millisecondsSinceEpoch],
     )).single;
+    final perDay = {
+      for (final r in await tx.rawQuery(
+        'SELECT study_day, count(*) n FROM review_events GROUP BY study_day',
+      ))
+        r['study_day'] as String: r['n'] as int,
+    };
+    String dayAgo(int n) =>
+        _studyDay(now, config['timezone'] as String, daysAgo: n);
+    var streak = 0;
+    for (
+      var i = perDay.containsKey(day) ? 0 : 1;
+      perDay.containsKey(dayAgo(i));
+      i++
+    ) {
+      streak++;
+    }
     return StudyStats(
+      learning: counts['learning'] as int,
+      mature: counts['mature'] as int,
+      streak: streak,
+      lastWeek: [for (var i = 6; i >= 0; i--) perDay[dayAgo(i)] ?? 0],
       entries: counts['entries'] as int,
       senses: counts['senses'] as int,
       drafts: counts['drafts'] as int,
@@ -628,5 +686,54 @@ class LibraryRepository {
           whereArgs: [snapshot.id],
         );
         return next;
+      });
+
+  /// Reverts the review [eventId] made from [snapshot] (the card as it was
+  /// before), provided nothing changed the card since. Returns the card's new
+  /// snapshot, ready to be rated again.
+  Future<StudyCard> undoReview(StudyCard snapshot, String eventId) =>
+      db.transaction((tx) async {
+        final card = await tx.query(
+          'cards',
+          where: 'id=?',
+          whereArgs: [snapshot.id],
+        );
+        final event = await tx.query(
+          'review_events',
+          where: 'id=?',
+          whereArgs: [eventId],
+        );
+        if (card.isEmpty ||
+            event.isEmpty ||
+            card.single['last_review_id'] != eventId ||
+            card.single['revision'] != snapshot.revision + 1) {
+          throw const UserFacingException(
+            'Không hoàn tác được: thẻ đã thay đổi sau lượt ôn này.',
+          );
+        }
+        final previous = await tx.query(
+          'review_events',
+          columns: ['id'],
+          where: 'card_id=? AND id!=?',
+          whereArgs: [snapshot.id, eventId],
+          orderBy: 'reviewed_at DESC',
+          limit: 1,
+        );
+        await tx.delete('review_events', where: 'id=?', whereArgs: [eventId]);
+        final revision = snapshot.revision + 2;
+        await tx.update(
+          'cards',
+          {
+            'state': snapshot.state,
+            'due_at': event.single['previous_due'],
+            'interval_days': snapshot.intervalDays,
+            'lapses': snapshot.lapses,
+            'revision': revision,
+            'last_review_id': previous.isEmpty ? null : previous.single['id'],
+          },
+          where: 'id=?',
+          whereArgs: [snapshot.id],
+        );
+        return snapshot.copyWith(revision: revision);
       });
 }
