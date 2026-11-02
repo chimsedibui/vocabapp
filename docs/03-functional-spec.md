@@ -116,8 +116,8 @@ Dán đoạn → chọn mức tối thiểu/số từ/nhóm → LLM trả JSON t
 
 - Mỗi nghĩa có một card `recognition` từ → nghĩa, tiến độ độc lập. Thẻ đảo chiều chưa bật.
 - Chưa học: `new`; sau đánh giá dùng bảng dưới. `I` là interval theo ngày của lần học trước, mặc định 1 nếu chưa có.
-- Quên: `relearning`, due = now + 10 phút; tăng lapse. Khó: `review`, due = now + max(1, ceil(1.2 × I)) ngày. Nhớ: `review`, due = now + max(1, ceil(2 × I)) ngày. Dễ: `review`, due = now + max(4, ceil(3 × I)) ngày. Với thẻ new: Khó 1 ngày, Nhớ 1 ngày, Dễ 4 ngày. Cap 365 ngày cho v1.
-- Khi Quên, interval lưu lại là 1 ngày; lượt ôn tiếp dùng giá trị này. Thẻ 10 phút không chặn người dùng thoát phiên; chờ đến due mới được ưu tiên lại.
+- Scheduler v2 có năm nút Quên/Khó/Tạm/Nhớ/Dễ; bảng chuẩn ở [tài liệu 11 §5](11-flashcards.md#5-quy-tắc-đánh-giá-và-lịch-ôn). Thẻ đang học đi qua bước 1 phút/10 phút/1 giờ rồi tốt nghiệp sang ngày; thẻ đã thuộc giãn ceil(1.2 × I)/2 × I/3 × I, luôn tăng dần. Cap 365 ngày.
+- Khi Quên, interval lưu lại là 1 ngày. Thẻ đến hạn trong 1 giờ được xếp lại cuối phiên; thoát phiên không mất lịch, thẻ trở lại khi đến due.
 - Lưu timestamp UTC; ngày hạn mức và thống kê dùng timezone profile (mặc định Asia/Ho_Chi_Minh). Chuyển múi giờ không thay timestamp due; thay đổi timezone ghi settings, không viết lại review cũ.
 - Hạn mức từ mới chỉ tính lượt đánh giá đầu tiên của card trong ngày; ôn lại không trừ hạn mức. Phiên 20 thẻ là kích thước phiên, không xóa backlog; cho mở phiên tiếp.
 - Luyện tự do không cập nhật schedule mặc định và có nhãn riêng. Không xem thao tác “lật” là nhớ.

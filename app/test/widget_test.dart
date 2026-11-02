@@ -64,7 +64,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: ReviewPage(repository: repo)));
     await tester.pumpAndSettle();
     expect(find.text('retain'), findsOneWidget);
-    await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit4);
     await tester.pumpAndSettle();
     expect(await db.query('review_events'), isEmpty);
     await tester.sendKeyEvent(LogicalKeyboardKey.space);
@@ -73,7 +73,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.space);
     await tester.pumpAndSettle();
     expect(find.text('giữ lại'), findsNothing);
-    await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit4);
     await tester.pumpAndSettle();
     expect((await db.query('review_events')).length, 1);
     expect(find.text('resilient'), findsOneWidget);
@@ -113,6 +113,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Quên'));
       await tester.pumpAndSettle();
+      expect(find.textContaining('1 thẻ sẽ quay lại sau'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
       expect((await db.query('cards')).single['state'], 'relearning');
     },

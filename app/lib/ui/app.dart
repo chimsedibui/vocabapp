@@ -331,7 +331,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   Future<void> _import() => _open(ImportPage(library: repo));
   Future<void> _passage() =>
       _open(PassagePage(library: repo, initialDeck: _deck));
-  Future<void> _study() => _open(ReviewPage(repository: repo, deckId: _deck));
+  Future<void> _study() =>
+      _open(ReviewPage(repository: repo, deckId: _deck, sync: widget.sync));
 
   static const _destinations = [
     (Icons.wb_sunny_outlined, Icons.wb_sunny, 'Hôm nay'),

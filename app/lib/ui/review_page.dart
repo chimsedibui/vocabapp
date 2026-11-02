@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:uuid/uuid.dart';
 import '../data/library_repository.dart';
 import '../domain/models.dart';
 import '../domain/scheduler.dart';
+import '../services/sync_service.dart';
 import 'editors.dart';
 import 'theme.dart';
 import 'word_details.dart';
@@ -16,11 +18,20 @@ import 'word_details.dart';
 /// - Tap the card or press Space to flip it, both ways.
 /// - Swipe or use ←/→ to move between cards. Rated cards stay viewable;
 ///   skipped ones are offered again on the summary.
-/// - 1–4 (or the buttons) rate a card once it has been flipped.
+/// - 1–5 (or the buttons) rate a card once it has been flipped.
+/// - A card due again within [requeueWithin] comes back later in the same
+///   session, after the other cards, once its time is up.
 class ReviewPage extends StatefulWidget {
-  const ReviewPage({super.key, required this.repository, this.deckId});
+  const ReviewPage({
+    super.key,
+    required this.repository,
+    this.deckId,
+    this.sync,
+  });
   final LibraryRepository repository;
   final String? deckId;
+  final SyncService? sync;
+  static const requeueWithin = Duration(hours: 1);
   @override
   State<ReviewPage> createState() => _ReviewPageState();
 }
@@ -36,20 +47,52 @@ class _ReviewPageState extends State<ReviewPage> {
 
   /// +1 when the last move went forward, -1 backward; drives the slide-in.
   int _direction = 1;
-  final _rated = <String, Rating>{};
 
-  /// Event ID per card, created on first flip and reused on retry.
-  final _events = <String, String>{};
+  /// Session state is per slot (index in [_cards]): a requeued card gets a
+  /// new slot with its updated snapshot.
+  final _rated = <int, Rating>{};
+
+  /// Event ID per slot, created on first flip and reused on retry.
+  final _events = <int, String>{};
+
+  /// When requeued slots become due.
+  final _dueAt = <int, DateTime>{};
   String? _error;
+  Timer? _tick;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) => _onTick());
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  /// On the summary, counts down and opens a requeued card once it is due.
+  void _onTick() {
+    if (!mounted || _card != null || _dueAt.isEmpty) return;
+    setState(() {
+      final due = _dueAt.keys.where((i) => !_rated.containsKey(i) && _ready(i));
+      if (due.isNotEmpty) {
+        _index = due.reduce(min);
+        _direction = 1;
+      }
+    });
   }
 
   Future<void> _load() async {
     try {
+      // Pull the other device's reviews first so the same card is not studied
+      // twice; a slow or offline server must not hold up the session.
+      await widget.sync?.sync().timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {},
+      );
       final cards = await widget.repository.studyQueue(deckId: widget.deckId);
       if (mounted) {
         setState(() {
@@ -58,6 +101,7 @@ class _ReviewPageState extends State<ReviewPage> {
           _flipped = false;
           _rated.clear();
           _events.clear();
+          _dueAt.clear();
         });
       }
     } catch (e) {
@@ -73,34 +117,50 @@ class _ReviewPageState extends State<ReviewPage> {
     if (card == null || _saving) return;
     setState(() {
       _flipped = !_flipped;
-      _events.putIfAbsent(card.id, () => const Uuid().v4());
+      _events.putIfAbsent(_index, () => const Uuid().v4());
     });
   }
 
   void _go(int step) {
-    final cards = _cards, card = _card;
-    if (cards == null || card == null || _saving) return;
+    final cards = _cards;
+    if (cards == null || _saving) return;
     setState(() {
       _error = null;
       _flipped = false;
       _direction = step;
-      // Past the last card is the summary, which offers skipped cards again.
-      _index = (_index + step).clamp(0, cards.length);
+      // Requeued cards that are not due yet are passed over. Past the last
+      // card is the summary, which offers skipped cards again.
+      var i = _index + step;
+      while (i >= 0 &&
+          i < cards.length &&
+          !_rated.containsKey(i) &&
+          !_ready(i)) {
+        i += step;
+      }
+      _index = i.clamp(0, cards.length);
     });
   }
 
-  /// Unrated cards, in session order.
+  bool _ready(int slot) => !(_dueAt[slot]?.isAfter(DateTime.now()) ?? false);
+
+  /// Unrated slots that can be studied now, in session order.
   List<int> get _skipped => [
-    for (final (i, c) in (_cards ?? const <StudyCard>[]).indexed)
-      if (!_rated.containsKey(c.id)) i,
+    for (var i = 0; i < (_cards?.length ?? 0); i++)
+      if (!_rated.containsKey(i) && _ready(i)) i,
+  ];
+
+  /// Requeued slots still waiting for their time.
+  List<int> get _waiting => [
+    for (final i in _dueAt.keys)
+      if (!_rated.containsKey(i) && !_ready(i)) i,
   ];
 
   Future<void> _rate(Rating rating) async {
     final card = _card;
     if (card == null ||
         _saving ||
-        !_events.containsKey(card.id) ||
-        _rated.containsKey(card.id)) {
+        !_events.containsKey(_index) ||
+        _rated.containsKey(_index)) {
       return;
     }
     setState(() {
@@ -108,10 +168,33 @@ class _ReviewPageState extends State<ReviewPage> {
       _error = null;
     });
     try {
-      await widget.repository.review(card, rating, _events[card.id]!);
+      final next = await widget.repository.review(
+        card,
+        rating,
+        _events[_index]!,
+      );
+      widget.sync?.requestSync();
       if (mounted) {
         setState(() {
-          _rated[card.id] = rating;
+          _rated[_index] = rating;
+          if (next != null &&
+              next.due.difference(DateTime.now()) <= ReviewPage.requeueWithin) {
+            _dueAt[_cards!.length] = next.due;
+            _cards!.add(
+              StudyCard(
+                id: card.id,
+                term: card.term,
+                meaning: card.meaning,
+                senseKey: card.senseKey,
+                state: next.state,
+                intervalDays: next.intervalDays,
+                lapses: next.lapses,
+                revision: card.revision + 1,
+                partOfSpeech: card.partOfSpeech,
+                pronunciation: card.pronunciation,
+              ),
+            );
+          }
           _saving = false;
           _flipped = false;
           _direction = 1;
@@ -141,8 +224,10 @@ class _ReviewPageState extends State<ReviewPage> {
       rating: rating,
       now: now,
     );
-    final minutes = next.due.difference(now).inMinutes;
-    return minutes < 60 ? '$minutes phút' : '${next.intervalDays} ngày';
+    final wait = next.due.difference(now);
+    if (wait < const Duration(hours: 1)) return '${wait.inMinutes} phút';
+    if (wait < const Duration(days: 1)) return '${wait.inHours} giờ';
+    return '${next.intervalDays} ngày';
   }
 
   bool get _touch => switch (Theme.of(context).platform) {
@@ -174,8 +259,8 @@ class _ReviewPageState extends State<ReviewPage> {
     if (cards == null) return const Center(child: CircularProgressIndicator());
     final card = _card;
     if (card == null) return _finished(cards);
-    final rated = _rated[card.id];
-    final seen = _events.containsKey(card.id);
+    final rated = _rated[_index];
+    final seen = _events.containsKey(_index);
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.space): _flip,
@@ -186,6 +271,7 @@ class _ReviewPageState extends State<ReviewPage> {
           [LogicalKeyboardKey.digit2, LogicalKeyboardKey.numpad2],
           [LogicalKeyboardKey.digit3, LogicalKeyboardKey.numpad3],
           [LogicalKeyboardKey.digit4, LogicalKeyboardKey.numpad4],
+          [LogicalKeyboardKey.digit5, LogicalKeyboardKey.numpad5],
         ].indexed)
           for (final key in keys)
             SingleActivator(key): () => _rate(Rating.values[i]),
@@ -243,7 +329,7 @@ class _ReviewPageState extends State<ReviewPage> {
                 Text(
                   _touch
                       ? 'Chạm thẻ để lật · vuốt trái/phải để chuyển thẻ'
-                      : 'Space lật thẻ · ← → chuyển thẻ · 1–4 đánh giá',
+                      : 'Space lật thẻ · ← → chuyển thẻ · 1–5 đánh giá',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: AppColors.of(context).muted),
                 ),
@@ -311,7 +397,7 @@ class _ReviewPageState extends State<ReviewPage> {
         ),
         layoutBuilder: (current, previous) => Stack(children: [?current]),
         child: _FlipCard(
-          key: ValueKey(card.id),
+          key: ValueKey(_index),
           flipped: _flipped,
           front: _front(card),
           back: _back(card),
@@ -398,6 +484,7 @@ class _ReviewPageState extends State<ReviewPage> {
     final tones = {
       Rating.again: colors.danger,
       Rating.hard: Colors.orange.shade700,
+      Rating.okay: Colors.amber.shade800,
       Rating.good: colors.accent,
       Rating.easy: Colors.green.shade600,
     };
@@ -442,19 +529,28 @@ class _ReviewPageState extends State<ReviewPage> {
         onPressed: _index > 0 && !_saving ? () => _go(-1) : null,
         icon: const Icon(Icons.chevron_left),
       ),
-      if (_events.containsKey(_card!.id))
+      if (_events.containsKey(_index))
         TextButton.icon(
           onPressed: _saving ? null : _flip,
           icon: const Icon(Icons.flip_outlined),
           label: Text(_flipped ? 'Xem mặt trước' : 'Xem nghĩa'),
         ),
       IconButton(
-        tooltip: _rated.containsKey(_card!.id) ? 'Thẻ tiếp (→)' : 'Bỏ qua (→)',
+        tooltip: _rated.containsKey(_index) ? 'Thẻ tiếp (→)' : 'Bỏ qua (→)',
         onPressed: !_saving ? () => _go(1) : null,
         icon: const Icon(Icons.chevron_right),
       ),
     ],
   );
+
+  String _countdown() {
+    final next = _waiting
+        .map((i) => _dueAt[i]!)
+        .reduce((a, b) => a.isBefore(b) ? a : b);
+    final left = next.difference(DateTime.now());
+    final seconds = max(0, left.inSeconds);
+    return '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
+  }
 
   Widget _finished(List<StudyCard> cards) => Center(
     child: Padding(
@@ -482,6 +578,15 @@ class _ReviewPageState extends State<ReviewPage> {
                 : 'Còn ${_skipped.length} thẻ đã bỏ qua, chưa đánh giá.',
             textAlign: TextAlign.center,
           ),
+          if (_waiting.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              '${_waiting.length} thẻ sẽ quay lại sau ${_countdown()}. '
+              'Cứ để trang này mở.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.of(context).muted),
+            ),
+          ],
           const SizedBox(height: 24),
           Wrap(
             spacing: 12,
@@ -498,10 +603,10 @@ class _ReviewPageState extends State<ReviewPage> {
                 ),
               if (cards.isNotEmpty) ...[
                 OutlinedButton(
-                  onPressed: () => setState(() {
-                    _index = max(0, cards.length - 1);
-                    _direction = -1;
-                  }),
+                  onPressed: () {
+                    _index = cards.length;
+                    _go(-1);
+                  },
                   child: const Text('Xem lại thẻ vừa học'),
                 ),
                 FilledButton(

@@ -6,6 +6,7 @@ import 'package:sqflite_common/sqlite_api.dart';
 
 import '../domain/models.dart';
 import '../domain/passage.dart';
+import '../domain/scheduler.dart';
 import '../data/ids.dart';
 
 class BackupSummary {
@@ -210,7 +211,7 @@ class BackupService {
             OR c.lapses<0 OR c.revision<0 OR c.suspended NOT IN (0,1)
             OR (c.state='new' AND c.due_at IS NOT NULL)
             OR (c.state!='new' AND c.due_at IS NULL)
-            OR c.scheduler_version!=1
+            OR c.scheduler_version NOT BETWEEN 1 AND ${Scheduler.version}
         """);
         final missingCards = await tx.rawQuery(
           "SELECT s.id FROM senses s LEFT JOIN cards c ON c.sense_id=s.id WHERE s.status='approved' AND c.id IS NULL",

@@ -4,48 +4,71 @@ import 'package:vocabapp/domain/scheduler.dart';
 void main() {
   final scheduler = Scheduler();
   final now = DateTime.utc(2026, 10, 19, 12);
-  test('new cards: again 10m, hard/good 1d, easy 4d', () {
-    for (final rating in Rating.values) {
-      final result = scheduler.review(
-        state: 'new',
-        intervalDays: 1,
-        lapses: 0,
+  Schedule review(String state, int interval, Rating rating) =>
+      scheduler.review(
+        state: state,
+        intervalDays: interval,
+        lapses: 2,
         rating: rating,
         now: now,
       );
-      final duration = rating == Rating.again
-          ? const Duration(minutes: 10)
-          : Duration(days: rating == Rating.easy ? 4 : 1);
-      expect(result.due, now.add(duration));
-      expect(result.lapses, rating == Rating.again ? 1 : 0);
+
+  test('new cards: short steps, then 1 day / 3 days', () {
+    const waits = {
+      Rating.again: Duration(minutes: 1),
+      Rating.hard: Duration(minutes: 10),
+      Rating.okay: Duration(hours: 1),
+      Rating.good: Duration(days: 1),
+      Rating.easy: Duration(days: 3),
+    };
+    for (final MapEntry(key: rating, value: wait) in waits.entries) {
+      final result = review('new', 1, rating);
+      expect(result.due, now.add(wait), reason: rating.name);
+      expect(result.lapses, 2, reason: 'learning cards never lapse');
+      expect(
+        result.state,
+        wait < const Duration(days: 1) ? 'relearning' : 'review',
+      );
     }
   });
-  test('again resets interval; long review intervals are capped', () {
-    final failed = scheduler.review(
-      state: 'review',
-      intervalDays: 90,
-      lapses: 2,
-      rating: Rating.again,
-      now: now,
-    );
-    expect(failed.intervalDays, 1);
+
+  test('review buttons are always strictly increasing', () {
+    for (final interval in [1, 2, 3, 5, 10, 40, 200]) {
+      final days = [
+        for (final r in [Rating.okay, Rating.good, Rating.easy])
+          review('review', interval, r).intervalDays,
+      ];
+      expect(days[0], lessThan(days[1]), reason: 'I=$interval $days');
+      expect(days[1], lessThanOrEqualTo(days[2]), reason: 'I=$interval $days');
+      if (days[2] < Scheduler.maxDays) {
+        expect(days[1], lessThan(days[2]), reason: 'I=$interval $days');
+      }
+    }
+    expect(review('review', 1, Rating.okay).intervalDays, 2);
+    expect(review('review', 1, Rating.good).intervalDays, 3);
+    expect(review('review', 1, Rating.easy).intervalDays, 4);
+    expect(review('review', 10, Rating.okay).intervalDays, 12);
+    expect(review('review', 10, Rating.good).intervalDays, 20);
+    expect(review('review', 10, Rating.easy).intervalDays, 30);
+    expect(review('review', 200, Rating.easy).intervalDays, 365);
+  });
+
+  test('forgetting a review card resets it and counts a lapse', () {
+    final failed = review('review', 90, Rating.again);
     expect(failed.state, 'relearning');
+    expect(failed.due, now.add(const Duration(minutes: 1)));
+    expect(failed.intervalDays, 1);
     expect(failed.lapses, 3);
-    final easy = scheduler.review(
-      state: 'review',
-      intervalDays: 200,
-      lapses: 2,
-      rating: Rating.easy,
-      now: now,
-    );
-    expect(easy.intervalDays, 365);
-    final hard = scheduler.review(
-      state: 'review',
-      intervalDays: 7,
-      lapses: 0,
-      rating: Rating.hard,
-      now: now,
-    );
-    expect(hard.intervalDays, 9);
+    expect(review('relearning', 1, Rating.good).intervalDays, 1);
+  });
+
+  test('hard on a review card checks again in 1 hour, then keeps I', () {
+    final hard = review('review', 10, Rating.hard);
+    expect(hard.state, 'relearning');
+    expect(hard.due, now.add(const Duration(hours: 1)));
+    expect(hard.lapses, 2);
+    final back = review(hard.state, hard.intervalDays, Rating.good);
+    expect(back.intervalDays, 10);
+    expect(review(hard.state, hard.intervalDays, Rating.easy).intervalDays, 20);
   });
 }
