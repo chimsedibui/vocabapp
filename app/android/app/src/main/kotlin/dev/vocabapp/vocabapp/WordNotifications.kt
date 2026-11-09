@@ -18,6 +18,7 @@ import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.StyleSpan
 import java.io.File
+import java.util.Properties
 
 /**
  * Pinned word on the lock screen: [WordService] keeps one ongoing notification
@@ -30,8 +31,12 @@ import java.io.File
  * background alarms days out) does not apply. Ongoing, because lock screens
  * such as ColorOS hide ordinary notifications seen before locking.
  *
- * Runs without the Flutter engine and reads `vocabulary.db` directly; settings
- * live in SharedPreferences so boot and app updates can restart the service.
+ * Runs in its own small process (`:word`, see AndroidManifest.xml) without the
+ * Flutter engine and reads `vocabulary.db` directly, so the foreground service
+ * does not keep the whole app in memory. The two processes share state through
+ * small files read fresh on every access (SharedPreferences caches per process):
+ * `word_settings` (enabled, interval; written on enable/disable) and
+ * `word_state` (recent words, last change; written only by the `:word` process).
  */
 object WordNotifications {
     const val ACTION_NEXT = "dev.vocabapp.vocabapp.WORD_NEXT"
@@ -42,38 +47,67 @@ object WordNotifications {
     // v2: DEFAULT importance; LOW ("silent") is hidden on most lock screens.
     private const val CHANNEL = "word_rotation_v2"
     private const val OLD_CHANNEL = "word_rotation"
-    private const val PREFS = "word_notifications"
+    const val EXTRA_FORCE = "force"
+    private const val SETTINGS = "word_settings"
+    private const val STATE = "word_state"
+    private const val LEGACY_PREFS = "word_notifications"
     private const val RECENT = 5
 
-    private fun prefs(context: Context) =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    private fun file(context: Context, name: String) = File(context.filesDir, "$name.properties")
 
-    fun enabled(context: Context) = prefs(context).getBoolean("enabled", false)
+    private fun read(context: Context, name: String) = Properties().apply {
+        runCatching { file(context, name).inputStream().use { load(it) } }
+    }
 
-    fun interval(context: Context) = prefs(context).getInt("interval", 15)
+    /** Write to a temp file and rename, so the other process never reads half a file. */
+    private fun write(context: Context, name: String, change: Properties.() -> Unit) {
+        val props = read(context, name).apply(change)
+        val target = file(context, name)
+        val temp = File(target.path + ".tmp")
+        temp.outputStream().use { props.store(it, null) }
+        temp.renameTo(target)
+    }
+
+    fun enabled(context: Context) = read(context, SETTINGS).getProperty("enabled") == "true"
+
+    fun interval(context: Context) =
+        read(context, SETTINGS).getProperty("interval")?.toIntOrNull() ?: 15
 
     fun enable(context: Context, minutes: Int) {
-        prefs(context).edit()
-            .putBoolean("enabled", true)
-            .putInt("interval", minutes.coerceIn(intervals.first(), intervals.last()))
-            .putLong("changed_at", 0)
-            .apply()
-        start(context)
+        write(context, SETTINGS) {
+            setProperty("enabled", "true")
+            setProperty("interval", minutes.coerceIn(intervals.first(), intervals.last()).toString())
+        }
+        start(context, force = true)
     }
 
     fun disable(context: Context) {
-        prefs(context).edit().putBoolean("enabled", false).apply()
+        write(context, SETTINGS) { setProperty("enabled", "false") }
         context.stopService(Intent(context, WordService::class.java))
         manager(context).cancel(NOTIFICATION_ID)
     }
 
-    /** Restarts the service after boot, an app update or a force stop. */
+    /**
+     * Restarts the service after boot, an app update or a force stop. Also moves
+     * settings from SharedPreferences (versions before the `:word` process);
+     * called from the main process before the service can run.
+     */
     fun restore(context: Context) {
+        if (!file(context, SETTINGS).exists()) {
+            val legacy = context.getSharedPreferences(LEGACY_PREFS, Context.MODE_PRIVATE)
+            if (legacy.contains("enabled")) {
+                write(context, SETTINGS) {
+                    setProperty("enabled", legacy.getBoolean("enabled", false).toString())
+                    setProperty("interval", legacy.getInt("interval", 15).toString())
+                }
+            }
+            context.deleteSharedPreferences(LEGACY_PREFS)
+        }
         if (enabled(context)) runCatching { start(context) }
     }
 
-    private fun start(context: Context) {
-        val intent = Intent(context, WordService::class.java)
+    private fun start(context: Context, force: Boolean = false) {
+        val intent = Intent(context, WordService::class.java).putExtra(EXTRA_FORCE, force)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             context.startForegroundService(intent)
         } else {
@@ -83,7 +117,8 @@ object WordNotifications {
 
     /** True when the word is due to change: [interval] minutes since the last one. */
     fun due(context: Context) =
-        System.currentTimeMillis() - prefs(context).getLong("changed_at", 0) >=
+        System.currentTimeMillis() -
+            (read(context, STATE).getProperty("changed_at")?.toLongOrNull() ?: 0) >=
             interval(context) * 60_000L
 
     private fun manager(context: Context) =
@@ -132,18 +167,18 @@ object WordNotifications {
                 }
             }
         if (words.isEmpty()) return null
-        val recent = prefs(context).getString("recent", "")!!.split('\n').filter { it.isNotEmpty() }
+        val recent = read(context, STATE).getProperty("recent", "").split(',').filter { it.isNotEmpty() }
         val fresh = words.filter { it.cardId !in recent }
         val word = (fresh.ifEmpty { words }).random()
         val keep = (listOf(word.cardId) + recent).take(minOf(RECENT, words.size - 1).coerceAtLeast(0))
-        prefs(context).edit().putString("recent", keep.joinToString("\n")).apply()
+        write(context, STATE) { setProperty("recent", keep.joinToString(",")) }
         return word
     }
 
     /** Picks a new word and builds its notification; records the change time. */
     fun next(context: Context): Notification {
         val word = runCatching { pick(context) }.getOrNull()
-        prefs(context).edit().putLong("changed_at", System.currentTimeMillis()).apply()
+        write(context, STATE) { setProperty("changed_at", System.currentTimeMillis().toString()) }
         return build(context, word)
     }
 
@@ -273,8 +308,10 @@ class WordService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        // Opening the app restarts the service; keep the word unless it is due.
-        if (started && !WordNotifications.due(this)) return START_STICKY
+        // Opening the app restarts the service; keep the word unless it is due
+        // or the learner just turned the feature on.
+        val force = intent?.getBooleanExtra(WordNotifications.EXTRA_FORCE, false) == true
+        if (started && !force && !WordNotifications.due(this)) return START_STICKY
         started = true
         // Must be foreground within seconds of startForegroundService; the
         // query is a single small SELECT.
