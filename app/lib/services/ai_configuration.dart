@@ -74,10 +74,10 @@ class AiConfiguration {
         key.contains(RegExp(r'[\r\n]')) ||
         model.trim().isEmpty ||
         model.length > 200 ||
-        contextWindow < 6500 ||
+        contextWindow < 7500 ||
         contextWindow > 2000000) {
       throw const UserFacingException(
-        'Kiểm tra API key, tên model/deployment và context window (6.500–2.000.000).',
+        'Kiểm tra API key, tên model/deployment và context window (7.500–2.000.000).',
       );
     }
   }

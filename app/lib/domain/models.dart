@@ -84,10 +84,11 @@ class Vocabulary {
     required this.suspended,
     this.partOfSpeech,
     this.pronunciation,
+    this.note,
   });
   final String entryId, senseId, term, meaning, senseKey, status, groups;
   final bool suspended;
-  final String? partOfSpeech, pronunciation;
+  final String? partOfSpeech, pronunciation, note;
 }
 
 /// A closed SCD Type 2 version of a sense.
@@ -120,10 +121,11 @@ class StudyCard {
     required this.revision,
     this.partOfSpeech,
     this.pronunciation,
+    this.note,
   });
   final String id, term, meaning, senseKey, state;
   final int intervalDays, lapses, revision;
-  final String? partOfSpeech, pronunciation;
+  final String? partOfSpeech, pronunciation, note;
 
   StudyCard copyWith({
     String? state,
@@ -141,6 +143,7 @@ class StudyCard {
     revision: revision ?? this.revision,
     partOfSpeech: partOfSpeech,
     pronunciation: pronunciation,
+    note: note,
   );
 }
 

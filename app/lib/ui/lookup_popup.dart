@@ -209,6 +209,8 @@ class _LookupPopupState extends State<LookupPopup> {
                                 pronunciation: v.pronunciation,
                               ),
                               Text(v.meaning),
+                              if (v.note case final note? when note.isNotEmpty)
+                                ExampleText(note, term: v.term),
                             ],
                           ),
                         ),
@@ -227,6 +229,8 @@ class _LookupPopupState extends State<LookupPopup> {
                               pronunciation: item.pronunciation,
                             ),
                             Text(item.meaning),
+                            if (item.example case final example?)
+                              ExampleText(example, term: item.term),
                           ],
                         ),
                         trailing: _added.contains(item)

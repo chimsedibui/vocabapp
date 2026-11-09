@@ -276,6 +276,7 @@ class PassageRepository {
           'status': 'approved',
           'part_of_speech': item.partOfSpeech,
           'pronunciation': item.pronunciation,
+          'note': item.example,
         });
         added++;
       } else if (existing['status'] == 'draft') {
@@ -304,9 +305,10 @@ class PassageRepository {
           // Fill gaps only; never overwrite what the user or an import set.
           await tx.rawUpdate(
             'UPDATE senses SET part_of_speech=coalesce(part_of_speech, ?), '
-            'pronunciation=coalesce(pronunciation, ?) WHERE id=? '
-            'AND (part_of_speech IS NULL OR pronunciation IS NULL)',
-            [item.partOfSpeech, item.pronunciation, senseId],
+            'pronunciation=coalesce(pronunciation, ?), note=coalesce(note, ?) '
+            'WHERE id=? AND (part_of_speech IS NULL OR pronunciation IS NULL '
+            'OR note IS NULL)',
+            [item.partOfSpeech, item.pronunciation, item.example, senseId],
           );
         }
         await tx.insert('sense_origins', {
