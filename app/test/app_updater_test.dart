@@ -51,6 +51,25 @@ void main() {
     bad.close();
   });
 
+  test('GitHub rate limiting says so instead of a generic error', () async {
+    final limited = AppUpdater(
+      client: MockClient(
+        (_) async => http.Response('', 429, headers: {'retry-after': '120'}),
+      ),
+    );
+    await expectLater(
+      limited.download(release, dir, os: 'android'),
+      throwsA(
+        isA<RateLimited>().having(
+          (e) => e.message,
+          'message',
+          contains('2 phút'),
+        ),
+      ),
+    );
+    limited.close();
+  });
+
   test('missing platform asset points to the release page', () async {
     final service = updater('');
     await expectLater(

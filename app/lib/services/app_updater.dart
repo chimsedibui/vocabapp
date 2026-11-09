@@ -60,11 +60,13 @@ class AppUpdater {
       final expected = RegExp(r'^[0-9a-f]{64}')
           .firstMatch(checksum.body.trim().toLowerCase())
           ?.group(0);
+      RateLimited.check(checksum);
       if (checksum.statusCode != 200 || expected == null) {
         throw const FormatException();
       }
       final response = await _client.send(http.Request('GET', url));
       final total = response.contentLength;
+      RateLimited.check(response);
       if (response.statusCode != 200 || (total ?? 0) > maxBytes) {
         throw const FormatException();
       }

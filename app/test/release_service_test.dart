@@ -64,5 +64,13 @@ void main() {
       throwsA(isA<UserFacingException>()),
     );
     broken.close();
+    final limited = ReleaseService(
+      client: MockClient(
+        (_) async =>
+            http.Response('', 403, headers: {'x-ratelimit-remaining': '0'}),
+      ),
+    );
+    await expectLater(limited.latest('0.2.0'), throwsA(isA<RateLimited>()));
+    limited.close();
   });
 }
