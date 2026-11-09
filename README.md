@@ -28,6 +28,8 @@ Source nằm trong [app/](app/README.md): thư viện SQLite, từ/nghĩa/nhóm,
 | [13 — API và passage thực tế](docs/13-api-and-passage.md) | Cấu hình key, trích CEFR, cache, duyệt và giới hạn |
 | [12 — GitHub, release và backup](docs/12-releases-and-backups.md) | CI tăng version, bộ cài, khóa beta và backup/restore |
 | [15 — Phân tích học tập](docs/15-learning-analytics.md) | Dữ liệu thu, chỉ số, yếu tố hành vi, gợi ý và forecast |
+| [16 — Phân tích hành vi (BA)](docs/16-behavior-analysis.md) | Dữ liệu chưa khai thác, dữ liệu nên thu thêm, danh mục insight, số liệu thật ban đầu |
+| [17 — Tổng quan nghiên cứu](docs/17-research-review.md) | Paper về log ôn tập và n-of-1, đối chiếu với chỉ số của app |
 
 ## Định hướng đề xuất
 
