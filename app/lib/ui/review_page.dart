@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 import '../data/library_repository.dart';
 import '../domain/models.dart';
 import '../domain/scheduler.dart';
+import '../services/speech.dart';
 import '../services/sync_service.dart';
 import 'editors.dart';
 import 'theme.dart';
@@ -19,7 +20,7 @@ import 'word_details.dart';
 /// - Swipe or use ←/→ to move between cards. Rated cards stay viewable;
 ///   skipped ones are offered again on the summary.
 /// - 1–5 (or the buttons) rate a card once it has been flipped; Z undoes the
-///   last rating.
+///   last rating; R reads the word aloud.
 /// - A card due again within [requeueWithin] comes back later in the same
 ///   session, after the other cards, once its time is up.
 class ReviewPage extends StatefulWidget {
@@ -116,6 +117,16 @@ class _ReviewPageState extends State<ReviewPage> {
 
   StudyCard? get _card =>
       _cards != null && _index < _cards!.length ? _cards![_index] : null;
+
+  Future<void> _speak() async {
+    final card = _card;
+    if (card == null) return;
+    if (!await Speech.speak(card.term) && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Thiết bị chưa có giọng đọc tiếng Anh.')),
+      );
+    }
+  }
 
   void _flip() {
     final card = _card;
@@ -316,6 +327,7 @@ class _ReviewPageState extends State<ReviewPage> {
         const SingleActivator(LogicalKeyboardKey.arrowRight): () => _go(1),
         const SingleActivator(LogicalKeyboardKey.keyZ): _undo,
         const SingleActivator(LogicalKeyboardKey.keyZ, control: true): _undo,
+        const SingleActivator(LogicalKeyboardKey.keyR): _speak,
         for (final (i, keys) in const [
           [LogicalKeyboardKey.digit1, LogicalKeyboardKey.numpad1],
           [LogicalKeyboardKey.digit2, LogicalKeyboardKey.numpad2],
@@ -377,7 +389,7 @@ class _ReviewPageState extends State<ReviewPage> {
                 _navigation(cards),
                 const SizedBox(height: 12),
                 Text(
-                  _touch ? 'Chạm thẻ để lật · vuốt trái/phải để chuyển thẻ' : 'Space lật thẻ · ← → chuyển thẻ · 1–5 đánh giá · Z hoàn tác',
+                  _touch ? 'Chạm thẻ để lật · vuốt trái/phải để chuyển thẻ' : 'Space lật thẻ · ← → chuyển thẻ · 1–5 đánh giá · Z hoàn tác · R đọc từ',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: AppColors.of(context).muted),
                 ),
@@ -527,6 +539,15 @@ class _ReviewPageState extends State<ReviewPage> {
                 ?.copyWith(fontWeight: FontWeight.w500),
           ),
         ),
+        if (card.note case final note? when note.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          ExampleText(
+            note,
+            term: card.term,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+        ],
       ],
     ),
   );
