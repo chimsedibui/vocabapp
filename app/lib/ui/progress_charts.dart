@@ -151,3 +151,95 @@ class CardMix extends StatelessWidget {
     );
   }
 }
+
+/// One series of bars with a value label on each non-empty bar and a tooltip
+/// per bar. Null values draw as an empty slot (no data, not zero).
+class ValueBars extends StatelessWidget {
+  const ValueBars({
+    super.key,
+    required this.values,
+    required this.labels,
+    required this.summary,
+    this.valueText,
+    this.tooltips,
+    this.max,
+    this.highlightLast = false,
+    this.height = 112,
+  });
+  final List<double?> values;
+  final List<String> labels;
+
+  /// Spoken description of the whole chart.
+  final String summary;
+  final String Function(double value)? valueText;
+  final List<String>? tooltips;
+
+  /// Fixed top of the scale (e.g. 1 for rates); defaults to the largest value.
+  final double? max;
+  final bool highlightLast;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final style = Theme.of(context).textTheme.labelSmall
+        ?.copyWith(color: colors.muted);
+    final peak =
+        max ?? values.fold<double>(0, (m, v) => v == null || v < m ? m : v);
+    final barSpace = height - 56;
+    String text(double v) =>
+        valueText?.call(v) ??
+        (v == v.roundToDouble() ? '${v.toInt()}' : v.toStringAsFixed(1));
+    return Semantics(
+      label: summary,
+      excludeSemantics: true,
+      child: SizedBox(
+        height: height,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            for (final (i, v) in values.indexed)
+              Expanded(
+                child: Tooltip(
+                  message:
+                      tooltips?[i] ??
+                      '${labels[i]}: ${v == null ? 'chưa có dữ liệu' : text(v)}',
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      if (v != null && v > 0)
+                        Text(text(v), style: style, maxLines: 1),
+                      const SizedBox(height: 2),
+                      Container(
+                        height: v == null || peak <= 0
+                            ? 2
+                            : (barSpace * v / peak).clamp(2, barSpace),
+                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                        decoration: BoxDecoration(
+                          color: v == null || v == 0
+                              ? colors.hairline
+                              : highlightLast && i == values.length - 1
+                              ? colors.accent
+                              : colors.accent.withValues(alpha: 0.55),
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(4),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        labels[i],
+                        style: style,
+                        maxLines: 1,
+                        overflow: TextOverflow.clip,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}

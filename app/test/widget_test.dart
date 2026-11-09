@@ -7,6 +7,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:vocabapp/data/database.dart';
 import 'package:vocabapp/data/library_repository.dart';
+import 'package:vocabapp/domain/scheduler.dart';
 import 'package:vocabapp/ui/app.dart';
 import 'package:vocabapp/ui/review_page.dart';
 import 'package:vocabapp/ui/ui_scale.dart';
@@ -51,9 +52,51 @@ void main() {
     await tester.tap(find.text('Nhớ'));
     await tester.pumpAndSettle();
     expect(find.text('Đã lưu 1 lượt ôn'), findsOneWidget);
-    expect((await db.query('review_events')).length, 1);
+    final review = (await db.query('review_events')).single;
+    expect(review['session_id'], isNotNull);
+    expect(review['shown_at'], isNotNull);
+    expect(review['flipped_at'], isNotNull);
     await tester.pumpWidget(const SizedBox());
   });
+
+  for (final size in [const Size(390, 844), const Size(1280, 800)]) {
+    testWidgets('insights page opens from Today at ${size.width}px', (
+      tester,
+    ) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final deck = (await repo.decks()).single.id;
+      await tester.runAsync(() async {
+        for (final w in ['retain', 'resilient', 'abundant']) {
+          await repo.addWord(term: w, meaning: 'nghĩa $w', deckId: deck);
+        }
+        for (final (i, card) in (await repo.studyQueue()).indexed) {
+          await repo.review(card, Rating.values[i + 2], 'e$i', sessionId: 's');
+        }
+      });
+      await tester.pumpWidget(VocabApp(repository: repo));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Xem phân tích'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.ensureVisible(find.text('Xem phân tích'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Xem phân tích'));
+      await tester.pumpAndSettle();
+      expect(find.text('Gợi ý cho bạn'), findsOneWidget);
+      expect(find.text('Từ đã qua'), findsWidgets);
+      await tester.scrollUntilVisible(
+        find.text('Từ khó'),
+        300,
+        scrollable: find.byType(Scrollable).last,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
 
   testWidgets('flashcards flip both ways, go back and use keys and swipes', (
     tester,

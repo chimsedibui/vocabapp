@@ -12,6 +12,10 @@ DatabaseFactory get appDatabaseFactory => Platform.isAndroid || Platform.isIOS
     ? mobile.databaseFactory
     : databaseFactoryFfi;
 
+/// Current DB version; also sent to the sync Worker so it can send an older
+/// app only the columns that app knows.
+const dbSchemaVersion = 6;
+
 Future<Database> openAppDatabase() async {
   final dir = await getApplicationSupportDirectory();
   await dir.create(recursive: true);
@@ -29,7 +33,7 @@ Future<Database> openVocabularyDatabase(
   path,
   options: OpenDatabaseOptions(
     singleInstance: singleInstance,
-    version: 5,
+    version: dbSchemaVersion,
     onConfigure: (db) async {
       await db.execute('PRAGMA foreign_keys = ON');
       // This pragma returns a row; Android's execSQL rejects that, so query it.
@@ -42,6 +46,7 @@ Future<Database> openVocabularyDatabase(
         ...importSchemaStatements,
         ...syncSchemaStatements,
         ...historySchemaStatements,
+        ...timingSchemaStatements,
       ]) {
         await db.execute(statement);
       }
@@ -80,6 +85,16 @@ Future<Database> openVocabularyDatabase(
       if (oldVersion < 5) {
         for (final statement in historySchemaStatements) {
           await db.execute(statement);
+        }
+      }
+      if (oldVersion < 6) {
+        for (final statement in timingSchemaStatements) {
+          await db.execute(statement);
+        }
+        // While this device ran an older app the Worker sent it reviews
+        // without timing; pull everything once more to get it back.
+        if (oldVersion >= 4) {
+          await db.execute("UPDATE sync_meta SET value='0' WHERE key='cursor'");
         }
       }
     },
@@ -165,6 +180,15 @@ const importSchemaStatements = [
     created_at INTEGER NOT NULL, selected_rows INTEGER NOT NULL,
     new_senses INTEGER NOT NULL, memberships INTEGER NOT NULL,
     approved INTEGER NOT NULL, skipped INTEGER NOT NULL)""",
+];
+
+/// Learning analytics (docs/15). A session is the reviews sharing a
+/// `session_id`; `shown_at`/`flipped_at` time each card. Null on reviews made
+/// before DB v6.
+const timingSchemaStatements = [
+  'ALTER TABLE review_events ADD COLUMN session_id TEXT',
+  'ALTER TABLE review_events ADD COLUMN shown_at INTEGER',
+  'ALTER TABLE review_events ADD COLUMN flipped_at INTEGER',
 ];
 
 /// Tables replicated by sync, parents first. `settings` stays per device.

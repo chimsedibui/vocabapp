@@ -19,6 +19,15 @@ Trong app, trên **cả hai** thiết bị: Cài đặt → Đồng bộ → nh�
 
 Đổi token: chạy lại `wrangler secret put SYNC_TOKEN` rồi nhập token mới trên các thiết bị.
 
+## Cập nhật Worker
+
+```bash
+cd server/sync-worker
+npx wrangler deploy
+```
+
+Bảng mới (ví dụ `devices`) được Worker tự tạo, không cần chạy lại `schema.sql`. Luôn deploy Worker trước khi cài bản app mới lên các máy.
+
 ## Giao thức (v1)
 
 Header bắt buộc: `Authorization: Bearer <token>`, `x-sync-protocol: 1`.
@@ -26,10 +35,16 @@ Header bắt buộc: `Authorization: Bearer <token>`, `x-sync-protocol: 1`.
 | Endpoint | Mô tả |
 |---|---|
 | `GET /v1/status` | `{seq}` — kiểm tra kết nối |
-| `GET /v1/pull?after=N&device=D&limit=L` | Dòng có `seq > N` từ thiết bị khác: `{rows, cursor, more}` |
-| `POST /v1/push` `{device, rows:[{t,p,d,x,c}]}` | Ghi tối đa 500 dòng/1 MB; bản có `changed_at` cũ hơn bị bỏ qua |
+| `GET /v1/pull?after=N&device=D&limit=L[&schema=S&app=V&platform=P]` | Dòng có `seq > N` từ thiết bị khác: `{rows, cursor, more, devices}` |
+| `POST /v1/push` `{device, schema?, rows:[{t,p,d,x,c}]}` | Ghi tối đa 500 dòng/1 MB; bản có `changed_at` cũ hơn bị bỏ qua |
 
-Mỗi request dùng 1–2 câu SQL nên nằm trong giới hạn 50 truy vấn/request của gói Free.
+**Nhiều phiên bản app cùng lúc.** `schema` là phiên bản DB của app; app trước DB v6 không gửi nên được coi là 5.
+- Worker bỏ các cột mới hơn `schema` (bảng `ADDED_COLUMNS` trong `src/index.js`) khỏi dòng gửi xuống.
+- Khi app cũ đẩy dòng lên, worker giữ nguyên giá trị của các cột đó trên server.
+- Mỗi lần pull, worker ghi thiết bị vào bảng `devices` (tự tạo nếu chưa có) và trả danh sách này về, để app báo máy nào chưa cập nhật.
+- Khi thêm cột mới vào bảng được đồng bộ: thêm vào `ADDED_COLUMNS` và **deploy Worker trước khi phát hành app**.
+
+Mỗi request dùng tối đa 5 câu SQL nên nằm trong giới hạn 50 truy vấn/request của gói Free.
 
 ## Khi Cloudflare hết hạn mức hoặc gặp sự cố
 

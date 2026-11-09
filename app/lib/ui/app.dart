@@ -18,6 +18,7 @@ import 'ai_settings.dart';
 import 'passage_page.dart';
 import 'progress_charts.dart';
 import 'import_page.dart';
+import 'insights_page.dart';
 import 'sync_settings.dart';
 import 'ui_scale.dart';
 
@@ -520,6 +521,19 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
               'Một nơi cho những từ bạn muốn nhớ. Học gọn, theo nhịp của bạn.',
             ),
             const SizedBox(height: 24),
+            if (widget.sync case final sync?)
+              ListenableBuilder(
+                listenable: sync,
+                builder: (context, _) => Column(
+                  children: [
+                    for (final d in sync.outdatedDevices)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: OutdatedDeviceNote(device: d),
+                      ),
+                  ],
+                ),
+              ),
             if (wide)
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -589,6 +603,15 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           ),
           const SizedBox(height: 8),
           WeekBars(counts: s.lastWeek, today: repo.clock()),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: () => _open(InsightsPage(repository: repo)),
+              icon: const Icon(Icons.insights_outlined),
+              label: const Text('Xem phân tích'),
+            ),
+          ),
         ],
       ),
     ),

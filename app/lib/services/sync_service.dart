@@ -88,6 +88,36 @@ class SyncConfigStore {
   }
 }
 
+/// A device as the Worker last saw it pull.
+class SyncDevice {
+  const SyncDevice({
+    required this.id,
+    required this.schema,
+    required this.seenAt,
+    this.app,
+    this.platform,
+  });
+  final String id;
+  final int schema;
+  final DateTime seenAt;
+
+  /// App version and OS; null for apps older than DB v6, which do not send
+  /// them.
+  final String? app, platform;
+
+  String get label {
+    final os = switch (platform) {
+      'android' => 'Điện thoại Android',
+      'windows' => 'Máy tính Windows',
+      'linux' => 'Máy Linux',
+      'macos' => 'Máy Mac',
+      'ios' => 'iPhone',
+      _ => 'Một thiết bị',
+    };
+    return app == null ? '$os (bản cũ)' : '$os (bản $app)';
+  }
+}
+
 class SyncSummary {
   const SyncSummary(this.pulled, this.pushed);
   final int pulled, pushed;
@@ -108,7 +138,10 @@ class SyncService extends ChangeNotifier {
     Future<SyncConfig?> Function()? loadConfig,
     http.Client? client,
     DateTime Function()? clock,
-  }) : _loadConfig = loadConfig ?? const SyncConfigStore().load,
+    this.appVersion,
+    String? platform,
+  }) : platform = platform ?? defaultTargetPlatform.name.toLowerCase(),
+       _loadConfig = loadConfig ?? const SyncConfigStore().load,
        _client = client ?? http.Client(),
        _clock = clock ?? DateTime.now;
 
@@ -116,6 +149,11 @@ class SyncService extends ChangeNotifier {
   final Future<SyncConfig?> Function() _loadConfig;
   final http.Client _client;
   final DateTime Function() _clock;
+
+  /// Reported to the Worker so other devices can show which version this
+  /// one runs.
+  final String? appVersion;
+  final String platform;
 
   static const protocol = '1';
   static const _pageSize = 500;
@@ -130,6 +168,22 @@ class SyncService extends ChangeNotifier {
 
   /// Bumped whenever remote rows were applied, so screens can reload.
   int remoteVersion = 0;
+
+  /// Devices on this server, from the last pull; empty with an older Worker.
+  List<SyncDevice> devices = const [];
+  String? _device;
+
+  /// Other devices seen in the last [recentDays] days that run an app with
+  /// an older DB than this one. They still sync, but without the newer data
+  /// (e.g. review timing); updating them is advised.
+  static const recentDays = 30;
+  List<SyncDevice> get outdatedDevices => [
+    for (final d in devices)
+      if (d.id != _device &&
+          d.schema < dbSchemaVersion &&
+          _clock().difference(d.seenAt).inDays < recentDays)
+        d,
+  ];
 
   Future<void>? _current;
   Timer? _debounce, _periodic;
@@ -204,6 +258,7 @@ class SyncService extends ChangeNotifier {
   /// One full pull + push. Throws [UserFacingException] on server errors.
   Future<SyncSummary> runOnce(SyncConfig config) async {
     final device = (await db.query('settings')).single['device_id'] as String;
+    _device = device;
     await _prepare(config);
     final pulled = await _pull(config, device);
     final pushed = await _push(config, device);
@@ -246,7 +301,11 @@ class SyncService extends ChangeNotifier {
         'after': '$cursor',
         'device': device,
         'limit': '$_pageSize',
+        'schema': '$dbSchemaVersion',
+        'platform': platform,
+        'app': ?appVersion,
       });
+      if (page == 0) _readDevices(body['devices']);
       rows.addAll((body['rows'] as List).cast<Map<String, dynamic>>());
       cursor = body['cursor'] as int;
       if (body['more'] != true) break;
@@ -273,6 +332,24 @@ class SyncService extends ChangeNotifier {
     });
     if (applied > 0) remoteVersion++;
     return applied;
+  }
+
+  void _readDevices(Object? value) {
+    if (value is! List) return;
+    devices = [
+      for (final d in value.whereType<Map<String, dynamic>>())
+        if (d['device'] case final String id)
+          SyncDevice(
+            id: id,
+            schema: (d['schema'] as num?)?.toInt() ?? 0,
+            seenAt: DateTime.fromMillisecondsSinceEpoch(
+              (d['seen_at'] as num?)?.toInt() ?? 0,
+              isUtc: true,
+            ),
+            app: d['app'] as String?,
+            platform: d['platform'] as String?,
+          ),
+    ];
   }
 
   Future<bool> _apply(
@@ -420,6 +497,7 @@ class SyncService extends ChangeNotifier {
       if (chunk.isEmpty) return;
       await _post(config, 'v1/push', {
         'device': device,
+        'schema': dbSchemaVersion,
         'rows': [
           for (final r in chunk)
             {

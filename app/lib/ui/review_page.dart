@@ -60,6 +60,16 @@ class _ReviewPageState extends State<ReviewPage> {
   /// When requeued slots become due.
   final _dueAt = <int, DateTime>{};
 
+  /// Analytics timing per slot: when the front was last shown before the
+  /// first flip, and when the answer was first revealed.
+  final _shownAt = <int, DateTime>{};
+  final _flippedAt = <int, DateTime>{};
+
+  /// Reviews after a pause longer than [_sessionGap] start a new session.
+  static const _sessionGap = Duration(minutes: 5);
+  String _session = const Uuid().v4();
+  DateTime? _lastRated;
+
   /// The last rating, while it can still be undone.
   ({int slot, StudyCard before, String event, int? requeued})? _last;
   String? _error;
@@ -84,7 +94,7 @@ class _ReviewPageState extends State<ReviewPage> {
     setState(() {
       final due = _dueAt.keys.where((i) => !_rated.containsKey(i) && _ready(i));
       if (due.isNotEmpty) {
-        _index = due.reduce(min);
+        _show(due.reduce(min));
         _direction = 1;
       }
     });
@@ -102,17 +112,24 @@ class _ReviewPageState extends State<ReviewPage> {
       if (mounted) {
         setState(() {
           _cards = cards;
-          _index = 0;
           _flipped = false;
           _rated.clear();
           _events.clear();
           _dueAt.clear();
+          _shownAt.clear();
+          _flippedAt.clear();
+          _show(0);
           _last = null;
         });
       }
     } catch (e) {
       if (mounted) setState(() => _loadError = e);
     }
+  }
+
+  void _show(int slot) {
+    _index = slot;
+    if (!_events.containsKey(slot)) _shownAt[slot] = DateTime.now();
   }
 
   StudyCard? get _card =>
@@ -134,6 +151,7 @@ class _ReviewPageState extends State<ReviewPage> {
     setState(() {
       _flipped = !_flipped;
       _events.putIfAbsent(_index, () => const Uuid().v4());
+      _flippedAt.putIfAbsent(_index, DateTime.now);
     });
   }
 
@@ -153,7 +171,7 @@ class _ReviewPageState extends State<ReviewPage> {
           !_ready(i)) {
         i += step;
       }
-      _index = i.clamp(0, cards.length);
+      _show(i.clamp(0, cards.length));
     });
   }
 
@@ -184,11 +202,19 @@ class _ReviewPageState extends State<ReviewPage> {
       _error = null;
     });
     try {
+      final now = DateTime.now();
+      if (_lastRated case final last? when now.difference(last) > _sessionGap) {
+        _session = const Uuid().v4();
+      }
       final next = await widget.repository.review(
         card,
         rating,
         _events[_index]!,
+        sessionId: _session,
+        shownAt: _shownAt[_index],
+        flippedAt: _flippedAt[_index],
       );
+      _lastRated = now;
       widget.sync?.requestSync();
       if (mounted) {
         setState(() {
@@ -219,9 +245,11 @@ class _ReviewPageState extends State<ReviewPage> {
           _flipped = false;
           _direction = 1;
           // Next unrated card; the summary when none are left after this one.
-          _index = _skipped.firstWhere(
-            (i) => i > _index,
-            orElse: () => _cards!.length,
+          _show(
+            _skipped.firstWhere(
+              (i) => i > _index,
+              orElse: () => _cards!.length,
+            ),
           );
         });
       }
@@ -688,7 +716,7 @@ class _ReviewPageState extends State<ReviewPage> {
               if (_skipped.isNotEmpty)
                 FilledButton(
                   onPressed: () => setState(() {
-                    _index = _skipped.first;
+                    _show(_skipped.first);
                     _direction = 1;
                   }),
                   child: Text('Học ${_skipped.length} thẻ đã bỏ qua'),
