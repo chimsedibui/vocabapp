@@ -12,8 +12,13 @@ import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.database.sqlite.SQLiteDatabase
 import android.graphics.Typeface
+import android.hardware.display.DisplayManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
+import android.view.Display
+import java.util.concurrent.Executors
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.StyleSpan
@@ -284,22 +289,37 @@ object WordNotifications {
  */
 class WordService : Service() {
     private var started = false
-    private val screenOn = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            if (!WordNotifications.due(context)) return
-            val pending = goAsync()
-            Thread {
-                try {
-                    WordNotifications.rotate(context.applicationContext)
-                } finally {
-                    pending.finish()
-                }
-            }.start()
+
+    // One worker: a second screen-on event sees the first one's change time.
+    private val worker = Executors.newSingleThreadExecutor()
+
+    private fun onScreenOn() = worker.execute {
+        if (WordNotifications.due(this)) WordNotifications.rotate(this)
+    }
+
+    // ColorOS skips ACTION_SCREEN_ON for this secondary process ("oplus skip
+    // sp"), so the display listener (a direct callback, not a broadcast) is
+    // the main signal; the receiver stays for other devices.
+    private val displays by lazy { getSystemService(DISPLAY_SERVICE) as DisplayManager }
+    private var lastState = Display.STATE_UNKNOWN
+    private val displayListener = object : DisplayManager.DisplayListener {
+        override fun onDisplayChanged(displayId: Int) {
+            if (displayId != Display.DEFAULT_DISPLAY) return
+            val state = displays.getDisplay(displayId)?.state ?: return
+            if (state == Display.STATE_ON && lastState != Display.STATE_ON) onScreenOn()
+            lastState = state
         }
+        override fun onDisplayAdded(displayId: Int) = Unit
+        override fun onDisplayRemoved(displayId: Int) = Unit
+    }
+    private val screenOn = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) = onScreenOn()
     }
 
     override fun onCreate() {
         super.onCreate()
+        lastState = displays.getDisplay(Display.DEFAULT_DISPLAY)?.state ?: Display.STATE_UNKNOWN
+        displays.registerDisplayListener(displayListener, Handler(Looper.getMainLooper()))
         registerReceiver(screenOn, IntentFilter(Intent.ACTION_SCREEN_ON))
     }
 
@@ -329,7 +349,9 @@ class WordService : Service() {
     }
 
     override fun onDestroy() {
+        displays.unregisterDisplayListener(displayListener)
         unregisterReceiver(screenOn)
+        worker.shutdown()
         super.onDestroy()
     }
 
