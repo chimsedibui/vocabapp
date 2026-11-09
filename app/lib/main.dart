@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
@@ -16,6 +17,16 @@ import 'ui/ui_scale.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Phones stay portrait: the layout is built for it, and an app that allows
+  // rotation makes Android show its rotate button whenever the phone tilts.
+  if (Platform.isAndroid) {
+    final view = WidgetsBinding.instance.platformDispatcher.views.first;
+    if (view.physicalSize.shortestSide / view.devicePixelRatio < 600) {
+      await SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+      ]);
+    }
+  }
   tz.initializeTimeZones();
   try {
     final dir = await getApplicationSupportDirectory();
