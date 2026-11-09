@@ -292,6 +292,23 @@ void main() {
     expect((await b.repo.stats()).senses, 1);
   });
 
+  test('without an interval (Android) edits wait for open/close', () async {
+    a.sync.start(interval: null);
+    await a.sync.sync();
+    final before = server.requests;
+    await a.repo.addWord(
+      term: 'retain',
+      meaning: 'giữ lại',
+      deckId: await a.deck(),
+    );
+    a.sync.requestSync();
+    await Future<void>.delayed(const Duration(seconds: 6));
+    expect(server.requests, before);
+    expect(await a.db.query('sync_outbox'), isNotEmpty);
+    await a.sync.sync();
+    expect(await a.db.query('sync_outbox'), isEmpty);
+  });
+
   test('wrong token is reported without touching data', () async {
     final wrong = SyncService(
       a.db,

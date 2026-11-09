@@ -187,16 +187,23 @@ class SyncService extends ChangeNotifier {
 
   Future<void>? _current;
   Timer? _debounce, _periodic;
+  bool _syncOnEdit = true;
 
-  /// Starts background syncing: now, every [interval], and on [requestSync].
-  void start({Duration interval = const Duration(minutes: 2)}) {
+  /// Syncs now. With an [interval] (desktop, where the app keeps running in
+  /// the tray) it also syncs periodically and after local edits
+  /// ([requestSync]). With `null` (Android) the app syncs only when opened or
+  /// sent to the background; see `LibraryHome`.
+  void start({Duration? interval = const Duration(minutes: 2)}) {
     _periodic?.cancel();
-    _periodic = Timer.periodic(interval, (_) => sync());
+    _syncOnEdit = interval != null;
+    if (interval != null) _periodic = Timer.periodic(interval, (_) => sync());
     unawaited(sync());
   }
 
   /// Coalesces bursts of local edits into one sync a few seconds later.
+  /// Does nothing when started without an interval.
   void requestSync() {
+    if (!_syncOnEdit) return;
     _debounce?.cancel();
     _debounce = Timer(const Duration(seconds: 5), () => sync());
   }

@@ -47,7 +47,10 @@ Future<void> main() async {
       VocabApp(
         repository: LibraryRepository(db),
         uiScale: uiScale,
-        sync: SyncService(db, appVersion: version)..start(),
+        sync: SyncService(db, appVersion: version)
+          ..start(
+            interval: Platform.isAndroid ? null : const Duration(minutes: 2),
+          ),
         desktop: desktop,
       ),
     );

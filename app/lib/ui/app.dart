@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 
@@ -186,6 +187,11 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     _remoteSeen = widget.sync?.remoteVersion ?? 0;
     widget.sync?.addListener(_onSync);
     _refresh();
+    _startTimer();
+  }
+
+  void _startTimer() {
+    _timer?.cancel();
     _timer = Timer.periodic(const Duration(minutes: 1), (_) {
       if (mounted && _tab == 0) _refresh();
     });
@@ -205,6 +211,12 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _refresh();
+      _startTimer();
+      widget.sync?.sync();
+    } else if (state == AppLifecycleState.paused && Platform.isAndroid) {
+      // Android syncs only on open and close; the pinned-word service keeps
+      // the process alive, so nothing should keep running in the background.
+      _timer?.cancel();
       widget.sync?.sync();
     }
   }
