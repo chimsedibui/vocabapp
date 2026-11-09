@@ -27,6 +27,7 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["appLabel"] = "VocabApp"
     }
 
     signingConfigs {
@@ -41,6 +42,11 @@ android {
     }
 
     buildTypes {
+        // Installs next to the release app, so testing never touches its data.
+        debug {
+            applicationIdSuffix = ".debug"
+            manifestPlaceholders["appLabel"] = "VocabApp Dev"
+        }
         release {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.

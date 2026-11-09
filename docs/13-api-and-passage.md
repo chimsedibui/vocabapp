@@ -54,3 +54,13 @@ Chưa có Google dịch dự phòng cho nhập từ đơn; Google không thể t
 - [Gemini OpenAI compatibility](https://ai.google.dev/gemini-api/docs/openai): Bearer API key, Chat Completions, response_format.
 - [Azure OpenAI Structured Outputs](https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/structured-outputs): API v1, model là deployment name, api-key.
 - [flutter_secure_storage](https://pub.dev/packages/flutter_secure_storage): plugin secure storage Android/Windows, yêu cầu C++ ATL trên Windows; Android automatic backup đã tắt trong manifest.
+
+## Ghim từ lên màn hình khóa (Android)
+
+Cài đặt → Thông báo từ vựng: bật "Ghim từ khó lên màn hình khóa", chọn khoảng tối thiểu 10/15/20 phút. Một thông báo ghim (ongoing) trên màn hình khóa và thanh thông báo hiện một từ có lần đánh giá gần nhất là Quên/Khó/Tạm (không tính thẻ tạm dừng), kèm IPA, từ loại, nghĩa và ví dụ. Không kêu, không rung (kênh `word_rotation_v2`, IMPORTANCE_DEFAULT không âm thanh; LOW bị nhiều màn hình khóa ẩn). Nút "Từ khác" đổi ngay, "Tắt" tắt hẳn; chạm mở app. Không lặp lại 5 từ vừa hiện khi còn từ khác. Chưa có từ khó thì hiện hướng dẫn.
+
+- Đổi từ khi màn hình bật (`ACTION_SCREEN_ON`) và đã qua khoảng đã chọn. Không dùng alarm: máy không bị đánh thức, và ColorOS (dời alarm nền của app tới vài ngày) không chặn được.
+- `WordService` là foreground service loại `specialUse`, giữ thông báo ghim và receiver màn hình; đọc thẳng `filesDir/vocabulary.db`. Ghim vì ColorOS ẩn trên màn hình khóa các thông báo thường đã xem trước khi khóa.
+- Cài đặt ở SharedPreferences `word_notifications`; service khởi động lại khi mở app, `BOOT_COMPLETED`, `MY_PACKAGE_REPLACED` (force stop, ví dụ vuốt tắt trên ColorOS, sẽ dừng service tới lần mở app sau).
+- Android 13+ hỏi quyền `POST_NOTIFICATIONS` khi bật. Trên ColorOS nên cho phép VocabApp chạy nền để service không bị tắt.
+- Bản debug có id `dev.vocabapp.vocabapp.debug` ("VocabApp Dev") để cài cạnh bản phát hành khi test.
