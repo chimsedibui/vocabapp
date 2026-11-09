@@ -57,6 +57,8 @@ class _InsightsPageState extends State<InsightsPage> {
                   minTileWidth: 380,
                   maxColumns: 2,
                   children: [
+                    _dailyTime(r),
+                    _sessionLengths(r),
                     _weekly(r),
                     _recall(r),
                     _fatigue(r),
@@ -190,6 +192,93 @@ class _InsightsPageState extends State<InsightsPage> {
             '${p.passed}/${p.checks} lượt',
     ],
   );
+
+  String _minutes(double m) =>
+      m < 10 && m != m.roundToDouble() ? m.toStringAsFixed(1) : '${m.round()}';
+
+  Widget _dailyTime(LearningReport r) {
+    final today = widget.repository.clock();
+    final n = r.dailyMinutes.length;
+    final labels = [
+      for (var i = 0; i < n; i++)
+        i == n - 1 ? 'Nay' : _date(today.subtract(Duration(days: n - 1 - i))),
+    ];
+    final studied = r.dailyMinutes.where((m) => m > 0).toList();
+    final average = studied.isEmpty
+        ? null
+        : studied.reduce((a, b) => a + b) / studied.length;
+    return _section(
+      'Thời gian học mỗi ngày',
+      '14 ngày gần nhất, tính từ lúc hiện thẻ tới lúc chấm (tối đa 2 phút/thẻ).'
+          '${average == null ? '' : ' Trung bình ${_minutes(average)} phút vào ngày có học.'}',
+      [
+        if (studied.isEmpty)
+          const Text('Cần vài phiên học trên bản mới để có dữ liệu.')
+        else
+          ValueBars(
+            values: r.dailyMinutes,
+            labels: [for (final (i, l) in labels.indexed) i.isOdd ? l : ''],
+            highlightLast: true,
+            valueText: _minutes,
+            tooltips: [
+              for (final (i, m) in r.dailyMinutes.indexed)
+                '${labels[i]}: ${_minutes(m)} phút',
+            ],
+            summary: [
+              for (final (i, m) in r.dailyMinutes.indexed)
+                '${labels[i]} ${_minutes(m)} phút',
+            ].join(', '),
+          ),
+      ],
+    );
+  }
+
+  Widget _sessionLengths(LearningReport r) {
+    final buckets = r.sessionLengths;
+    final labels = [for (final b in buckets) b.label.replaceAll(' phút', '')];
+    final average = r.averageSessionMinutes;
+    return _section(
+      'Độ dài phiên học',
+      'Phiên trong 90 ngày theo thời gian học thực (phút). '
+          '${average == null ? '' : 'Trung bình ${_minutes(average)} phút/phiên.'}',
+      [
+        if (buckets.every((b) => b.sessions == 0))
+          const Text('Cần vài phiên học trên bản mới để có dữ liệu.')
+        else ...[
+          Text('Số phiên', style: Theme.of(context).textTheme.labelMedium),
+          ValueBars(
+            values: [for (final b in buckets) b.sessions.toDouble()],
+            labels: labels,
+            height: 96,
+            tooltips: [
+              for (final b in buckets)
+                '${b.label}: ${b.sessions} phiên · ${b.cards} thẻ',
+            ],
+            summary: [for (final b in buckets) '${b.label} ${b.sessions} phiên']
+                .join(', '),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Tỉ lệ không “Quên”',
+            style: Theme.of(context).textTheme.labelMedium,
+          ),
+          ValueBars(
+            values: [for (final b in buckets) b.rate],
+            labels: labels,
+            height: 96,
+            max: 1,
+            valueText: (v) => '${(v * 100).round()}%',
+            tooltips: [
+              for (final b in buckets)
+                '${b.label}: ${_pct(b.rate)} · ${b.passed}/${b.cards} thẻ',
+            ],
+            summary: [for (final b in buckets) '${b.label} ${_pct(b.rate)}']
+                .join(', '),
+          ),
+        ],
+      ],
+    );
+  }
 
   Widget _recall(LearningReport r) => _section(
     'Tỉ lệ nhớ theo khoảng cách ôn',

@@ -90,6 +90,75 @@ void main() {
     expect(r.dueForecast.first, 2);
   });
 
+  test('daily minutes and session length buckets', () {
+    final reviews = <ReviewRecord>[
+      // Today, session a: 4 cards × 2 min = 8 min (<10), all remembered.
+      for (var i = 0; i < 4; i++)
+        review('a$i', Rating.good, session: 'a', minute: i, secondsShown: 120),
+      // Two days ago, session b: 12 cards × 2 min = 24 min (20–30), half forgotten.
+      for (var i = 0; i < 12; i++)
+        review(
+          'b$i',
+          i.isEven ? Rating.good : Rating.again,
+          daysAgo: 2,
+          session: 'b',
+          minute: i,
+          secondsShown: 120,
+        ),
+      // 20 days ago: outside the 14-day chart, still a session.
+      review('c', Rating.good, daysAgo: 20, session: 'c', secondsShown: 60),
+    ];
+    final r = LearningReport.compute(today: today, cards: {}, reviews: reviews);
+    expect(r.dailyMinutes, hasLength(LearningReport.dailyDays));
+    expect(r.dailyMinutes.last, 8);
+    expect(r.dailyMinutes[LearningReport.dailyDays - 3], 24);
+    expect(r.dailyMinutes.reduce((a, b) => a + b), 32);
+    final byLabel = {for (final b in r.sessionLengths) b.label: b};
+    expect(byLabel.keys, [
+      '<10 phút',
+      '10–20 phút',
+      '20–30 phút',
+      '30–45 phút',
+      '>45 phút',
+    ]);
+    expect(byLabel['<10 phút']!.sessions, 2);
+    expect(byLabel['<10 phút']!.rate, 1);
+    expect(byLabel['20–30 phút']!.sessions, 1);
+    expect(byLabel['20–30 phút']!.rate, 0.5);
+    expect(r.averageSessionMinutes, closeTo((8 + 24 + 1) / 3, 1e-9));
+  });
+
+  test('suggests the session length with the best recall', () {
+    final reviews = <ReviewRecord>[
+      for (var s = 0; s < 3; s++) ...[
+        for (var i = 0; i < 5; i++)
+          review(
+            's$s$i',
+            Rating.good,
+            daysAgo: s,
+            session: 'short$s',
+            minute: i,
+            secondsShown: 60,
+          ),
+        for (var i = 0; i < 20; i++)
+          review(
+            'l$s$i',
+            i.isEven ? Rating.good : Rating.again,
+            daysAgo: s,
+            hour: 20,
+            session: 'long$s',
+            minute: i,
+            secondsShown: 120,
+          ),
+      ],
+    ];
+    final r = LearningReport.compute(today: today, cards: {}, reviews: reviews);
+    expect(
+      r.suggestions.join('\n'),
+      contains('Phiên <10 phút cho tỉ lệ nhớ cao nhất (100%)'),
+    );
+  });
+
   test('rating trend compares last vs first rating in the window', () {
     final r = LearningReport.compute(
       today: today,

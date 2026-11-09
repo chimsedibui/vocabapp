@@ -124,6 +124,14 @@ class SessionStat {
   Duration active = Duration.zero;
 }
 
+/// Sessions whose active time falls in one length bucket.
+class SessionLength {
+  SessionLength(this.label);
+  final String label;
+  int sessions = 0, cards = 0, passed = 0;
+  double? get rate => cards == 0 ? null : passed / cards;
+}
+
 class Trend {
   int up = 0, same = 0, down = 0;
   int get total => up + same + down;
@@ -145,6 +153,13 @@ class LearningReport {
   static const weeksShown = 8;
   static const forecastDays = 14;
   static const matureDays = 21;
+  static const dailyDays = 14;
+
+  /// Session active time in minutes, [start, end).
+  static const lengthBuckets = [(0, 10), (10, 20), (20, 30), (30, 45)];
+
+  /// A length bucket needs this many sessions before it feeds a suggestion.
+  static const minSessions = 3;
 
   /// Interval buckets (days before the check) for recall rate.
   static const intervalBuckets = [(1, 3), (4, 10), (11, 30), (31, 9999)];
@@ -194,6 +209,16 @@ class LearningReport {
 
   /// Newest first, at most 10.
   late final List<SessionStat> sessions;
+
+  /// Active minutes per study day, oldest first, ending today.
+  late final List<double> dailyMinutes;
+
+  /// Sessions of the last 90 days by active time; the last bucket is open.
+  late final List<SessionLength> sessionLengths;
+
+  /// Mean active minutes per session over the last 90 days, null without
+  /// sessions.
+  late final double? averageSessionMinutes;
 
   /// Words reviewed at least twice in the window: last rating vs first.
   late final Trend trend7, trend30;
@@ -251,6 +276,7 @@ class LearningReport {
       for (final (label, _, _) in lateBuckets) PassRate(label),
     ];
     final sessions = <String, SessionStat>{};
+    final dailyMs = List.filled(dailyDays, 0);
     final positions = <String, int>{};
     final graduated = <String>{};
     final thinks = <int>[];
@@ -269,6 +295,9 @@ class LearningReport {
         if (firstGraduation) week._graduated++;
       }
       final age = today.difference(r.day).inDays;
+      if (age >= 0 && age < dailyDays) {
+        dailyMs[dailyDays - 1 - age] += r.activeTime.inMilliseconds;
+      }
       if (age < 30) studied.add(r.day);
       if (age < 90) {
         final part = dayParts.indexWhere(
@@ -357,7 +386,32 @@ class LearningReport {
 
     thinks.sort();
     final recent = weeks.skip(weeksShown - 4);
+    final lengths = [
+      for (final (lo, hi) in lengthBuckets)
+        SessionLength(lo == 0 ? '<$hi phút' : '$lo–$hi phút'),
+      SessionLength('>${lengthBuckets.last.$2} phút'),
+    ];
+    final since = daysAgo(89);
+    var activeSum = Duration.zero, counted = 0;
+    for (final s in sessions.values) {
+      if (s.start.isBefore(since) || s.active == Duration.zero) continue;
+      final minutes = s.active.inSeconds / 60;
+      final i = lengthBuckets.indexWhere(
+        (b) => minutes >= b.$1 && minutes < b.$2,
+      );
+      final bucket = lengths[i < 0 ? lengths.length - 1 : i];
+      bucket.sessions++;
+      bucket.cards += s.cards;
+      bucket.passed += s.passed;
+      activeSum += s.active;
+      counted++;
+    }
     report
+      ..dailyMinutes = [for (final ms in dailyMs) ms / 60000]
+      ..sessionLengths = lengths
+      ..averageSessionMinutes = counted == 0
+          ? null
+          : activeSum.inSeconds / 60 / counted
       ..byDayPart = partRates
       ..byLateness = lateRates;
     return report
@@ -423,6 +477,21 @@ class LearningReport {
           break;
         }
       }
+    }
+
+    final lengths =
+        sessionLengths
+            .where((l) => l.sessions >= minSessions && l.cards >= minChecks)
+            .toList()
+          ..sort((a, b) => b.rate!.compareTo(a.rate!));
+    if (lengths.length >= 2 &&
+        lengths.first.rate! - lengths.last.rate! >= 0.1) {
+      tips.add(
+        'Phiên ${lengths.first.label} cho tỉ lệ nhớ cao nhất '
+        '(${pct(lengths.first.rate!)}), phiên ${lengths.last.label} thấp nhất '
+        '(${pct(lengths.last.rate!)}). Ưu tiên học theo phiên '
+        '${lengths.first.label}.',
+      );
     }
 
     final parts = byDayPart.where(enough).toList()

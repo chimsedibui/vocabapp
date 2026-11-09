@@ -36,6 +36,8 @@ Mỗi lượt chấm thẻ ghi một dòng vào `review_events`.
 | **Tốc độ học** | Số từ đã qua trong 4 tuần gần nhất ÷ 4 |
 | **Tỉ lệ nhớ** | % lượt **không** chấm "Quên", chỉ tính thẻ đang ở `review`, tức kiểm tra trí nhớ thật sau ≥1 ngày |
 | **Phút học** | Tổng của (`reviewed_at` − `shown_at`) qua các lượt, mỗi thẻ tối đa 2 phút để thẻ bỏ quên không bị tính |
+| **Phút học mỗi ngày** | Phút học theo ngày học, 14 ngày gần nhất; trung bình chỉ tính ngày có học |
+| **Độ dài phiên** | Phút học thực của phiên, chia khung <10, 10–20, 20–30, 30–45, >45 phút (90 ngày). Mỗi khung có số phiên và % thẻ không "Quên" |
 | **Thời gian nghĩ** | `flipped_at` − `shown_at`, lấy trung vị trong 30 ngày |
 | **Điểm rating** | Quên = 1, Khó = 2, Tạm = 3, Nhớ = 4, Dễ = 5. Trung bình theo tuần |
 | **Xu hướng từng từ** | Với từ được ôn ≥ 2 lần trong 7 hoặc 30 ngày: so lần chấm cuối với lần chấm đầu → tăng / giữ / giảm |
@@ -87,6 +89,7 @@ Mục "Gợi ý cho bạn" sinh câu khuyên từ các luật dưới đây. M�
 |---|---|
 | Tỉ lệ nhớ 30 ngày < 80% / > 95% | Giảm / tăng số từ mới mỗi phiên |
 | Một nhóm thẻ trong phiên thấp hơn nhóm 1–10 ≥ 10 điểm % | Chia phiên ở ngưỡng trước đó |
+| Khung độ dài phiên tốt nhất hơn khung kém nhất ≥ 10 điểm % (mỗi khung ≥ 3 phiên, ≥ 15 thẻ) | Ưu tiên phiên dài bằng khung tốt nhất |
 | Buổi tốt nhất hơn buổi kém nhất ≥ 10 điểm % | Học từ mới vào buổi tốt nhất |
 | Ôn đúng hạn hơn ôn trễ ≥ 10 điểm % | Học đều mỗi ngày |
 | Học < 15/30 ngày | Đặt mốc học cố định mỗi ngày |
