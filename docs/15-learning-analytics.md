@@ -111,7 +111,13 @@ Cài đặt → Dữ liệu → **Xuất lượt ôn (CSV)**. File UTF-8 có BOM
 ## 7. Tương thích và giới hạn
 
 - **DB v6** thêm 3 cột nullable vào `review_events`. Backup lên **format 5**; backup 1–4 vẫn khôi phục được, các cột mới để trống.
-- **Sync:** lượt ôn từ app bản mới có thêm cột, nên máy chạy bản cũ sẽ báo "cập nhật app" khi kéo về. Hãy cập nhật cả hai máy.
+- **Sync khi hai máy khác phiên bản:**
+  - App gửi kèm `schema` (phiên bản DB), số phiên bản app và hệ điều hành mỗi lần đồng bộ.
+  - Worker cắt các cột mà máy cũ chưa biết trước khi gửi xuống, nên máy cũ vẫn đồng bộ bình thường.
+  - Khi máy cũ gửi lại một lượt ôn, worker giữ nguyên dữ liệu thời gian đang có trên server.
+  - Máy mới hiện thông báo "… chưa cập nhật" ở Hôm nay và Cài đặt → Đồng bộ, áp dụng cho máy đã đồng bộ trong 30 ngày gần nhất.
+  - Khi máy cũ lên DB v6, app kéo lại toàn bộ dữ liệu một lần để lấy đủ dữ liệu thời gian.
+  - **Cần deploy lại Worker trước khi cài app mới**; nếu không, máy cũ vẫn báo "cập nhật app" như trước.
 - Thời gian học chỉ tính từ bản này trở đi, và mỗi thẻ tối đa 2 phút.
 - Dữ liệu cá nhân ít, nên chênh lệch nhỏ giữa các nhóm chỉ là nhiễu. Gợi ý chỉ xuất hiện khi chênh ≥ 10 điểm % và có đủ lượt.
 

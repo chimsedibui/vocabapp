@@ -521,6 +521,19 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
               'Một nơi cho những từ bạn muốn nhớ. Học gọn, theo nhịp của bạn.',
             ),
             const SizedBox(height: 24),
+            if (widget.sync case final sync?)
+              ListenableBuilder(
+                listenable: sync,
+                builder: (context, _) => Column(
+                  children: [
+                    for (final d in sync.outdatedDevices)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: OutdatedDeviceNote(device: d),
+                      ),
+                  ],
+                ),
+              ),
             if (wide)
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,

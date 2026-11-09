@@ -25,6 +25,20 @@ class FakeSyncServer {
   String failCode = 'quota';
   int requests = 0;
 
+  /// Last pull per device, as the Worker's `devices` table.
+  final devices = <String, Map<String, Object?>>{};
+
+  /// Mirrors ADDED_COLUMNS in the Worker.
+  static const added = {
+    6: {
+      'review_events': ['session_id', 'shown_at', 'flipped_at'],
+    },
+  };
+  static Map<String, List<String>> unknown(int schema) => {
+    for (final MapEntry(key: v, value: tables) in added.entries)
+      if (v > schema) ...tables,
+  };
+
   late final client = MockClient((request) async {
     requests++;
     if (request.headers['authorization'] != 'Bearer $token') {
@@ -41,6 +55,15 @@ class FakeSyncServer {
       final after = int.parse(url.queryParameters['after']!);
       final device = url.queryParameters['device']!;
       final limit = int.parse(url.queryParameters['limit']!);
+      final schema = int.parse(url.queryParameters['schema'] ?? '5');
+      devices[device] = {
+        'device': device,
+        'schema': schema,
+        'app': url.queryParameters['app'],
+        'platform': url.queryParameters['platform'],
+        'seen_at': DateTime.now().millisecondsSinceEpoch,
+      };
+      final hidden = unknown(schema);
       final page =
           (rows.values
                   .where(
@@ -51,7 +74,14 @@ class FakeSyncServer {
               .take(limit)
               .map(
                 (r) => {
-                  for (final k in ['t', 'p', 'd', 'x', 'c', 's']) k: r[k],
+                  for (final k in ['t', 'p', 'x', 'c', 's']) k: r[k],
+                  'd': switch ((r['d'] as String?, hidden[r['t']])) {
+                    (final String d, final List<String> drop) => jsonEncode(
+                      (jsonDecode(d) as Map)
+                        ..removeWhere((k, _) => drop.contains(k)),
+                    ),
+                    _ => r['d'],
+                  },
                 },
               )
               .toList();
@@ -60,17 +90,29 @@ class FakeSyncServer {
         'rows': page,
         'cursor': more ? page.last['s'] : (seq > after ? seq : after),
         'more': more,
+        'devices': devices.values.toList(),
       });
     }
     final body = jsonDecode(request.body) as Map<String, dynamic>;
     final base = seq;
+    final keep = unknown((body['schema'] as int?) ?? 5);
     var accepted = 0;
     for (final (i, r) in (body['rows'] as List).indexed) {
       final key = '${r['t']}|${r['p']}';
       final old = rows[key];
       if (old != null && (old['c'] as int) > (r['c'] as int)) continue;
+      var data = r['d'] as String?;
+      if (keep[r['t']] case final columns?
+          when data != null && old?['d'] != null) {
+        final previous = jsonDecode(old!['d'] as String) as Map;
+        data = jsonEncode({
+          ...jsonDecode(data) as Map,
+          for (final c in columns) c: previous[c],
+        });
+      }
       rows[key] = {
         ...r as Map<String, dynamic>,
+        'd': data,
         'device': body['device'],
         's': base + i + 1,
       };
@@ -290,6 +332,85 @@ void main() {
     expect((await a.repo.stats()).senses, 1);
   });
 
+  test('a device on an older app syncs without the newer columns', () async {
+    await a.repo.addWord(
+      term: 'retain',
+      meaning: 'giữ lại',
+      deckId: await a.deck(),
+    );
+    await a.repo.review(
+      (await a.repo.studyQueue()).single,
+      Rating.good,
+      'timed',
+      sessionId: 's1',
+      shownAt: DateTime.utc(2026, 11, 10, 1),
+    );
+    await a.sync.runOnce(FakeSyncServer.config);
+
+    // An app before DB v6 sends neither schema nor app version.
+    Future<Map<String, dynamic>> legacy(String path, [Object? body]) async {
+      final headers = {
+        'authorization': 'Bearer ${FakeSyncServer.token}',
+        'x-sync-protocol': '1',
+      };
+      final url = Uri.parse('https://sync.test/$path');
+      final response = body == null
+          ? await server.client.get(url, headers: headers)
+          : await server.client.post(
+              url,
+              headers: headers,
+              body: jsonEncode(body),
+            );
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    }
+
+    final pulled = await legacy('v1/pull?after=0&device=old&limit=500');
+    final review = (pulled['rows'] as List).firstWhere(
+      (r) => r['t'] == 'review_events',
+    );
+    final data = jsonDecode(review['d'] as String) as Map<String, dynamic>;
+    expect(data.containsKey('session_id'), isFalse);
+    expect(data['rating'], 'good');
+
+    // Its unchanged copy coming back does not erase the timing.
+    await legacy('v1/push', {
+      'device': 'old',
+      'rows': [
+        {...review, 'c': review['c']}..remove('s'),
+      ],
+    });
+    final stored = jsonDecode(
+      server.rows['review_events|timed']!['d'] as String,
+    );
+    expect(stored['session_id'], 's1');
+
+    await b.sync.runOnce(FakeSyncServer.config);
+    expect((await b.db.query('review_events')).single['session_id'], 's1');
+    expect(b.sync.outdatedDevices.map((d) => (d.id, d.label)), [
+      ('old', 'Một thiết bị (bản cũ)'),
+    ]);
+  });
+
+  test('upgrading to DB v6 pulls everything again for review timing', () async {
+    final dir = await Directory.systemTemp.createTemp('vocabapp-v6');
+    addTearDown(() => dir.delete(recursive: true));
+    final path = '${dir.path}/db';
+    var db = await openVocabularyDatabase(databaseFactoryFfiNoIsolate, path);
+    for (final column in ['session_id', 'shown_at', 'flipped_at']) {
+      await db.execute('ALTER TABLE review_events DROP COLUMN $column');
+    }
+    await db.insert('sync_meta', {'key': 'cursor', 'value': '42'});
+    await db.setVersion(5);
+    await db.close();
+    db = await openVocabularyDatabase(databaseFactoryFfiNoIsolate, path);
+    addTearDown(db.close);
+    expect(await db.getVersion(), dbSchemaVersion);
+    expect(
+      (await db.query('sync_meta', where: "key='cursor'")).single['value'],
+      '0',
+    );
+  });
+
   test(
     'upgrade rewrites legacy random IDs and keeps every reference',
     () async {
@@ -383,6 +504,8 @@ void main() {
 
   final liveUrl = Platform.environment['SYNC_TEST_URL'];
   test('live Worker: two devices converge through real D1 SQL', () async {
+    // flutter_test answers every real HTTP request with 400 otherwise.
+    HttpOverrides.global = null;
     final config = SyncConfig(
       url: liveUrl!,
       token: Platform.environment['SYNC_TEST_TOKEN']!,
@@ -409,6 +532,7 @@ void main() {
         final theirs = await y.table(t);
         expect(theirs, containsAll(mine), reason: t);
       }
+      expect(sy.devices.map((d) => d.schema), contains(dbSchemaVersion));
     } finally {
       sx.dispose();
       sy.dispose();

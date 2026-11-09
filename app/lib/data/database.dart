@@ -12,6 +12,10 @@ DatabaseFactory get appDatabaseFactory => Platform.isAndroid || Platform.isIOS
     ? mobile.databaseFactory
     : databaseFactoryFfi;
 
+/// Current DB version; also sent to the sync Worker so it can send an older
+/// app only the columns that app knows.
+const dbSchemaVersion = 6;
+
 Future<Database> openAppDatabase() async {
   final dir = await getApplicationSupportDirectory();
   await dir.create(recursive: true);
@@ -29,7 +33,7 @@ Future<Database> openVocabularyDatabase(
   path,
   options: OpenDatabaseOptions(
     singleInstance: singleInstance,
-    version: 6,
+    version: dbSchemaVersion,
     onConfigure: (db) async {
       await db.execute('PRAGMA foreign_keys = ON');
       // This pragma returns a row; Android's execSQL rejects that, so query it.
@@ -86,6 +90,11 @@ Future<Database> openVocabularyDatabase(
       if (oldVersion < 6) {
         for (final statement in timingSchemaStatements) {
           await db.execute(statement);
+        }
+        // While this device ran an older app the Worker sent it reviews
+        // without timing; pull everything once more to get it back.
+        if (oldVersion >= 4) {
+          await db.execute("UPDATE sync_meta SET value='0' WHERE key='cursor'");
         }
       }
     },

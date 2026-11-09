@@ -47,6 +47,43 @@ class SyncStatusButton extends StatelessWidget {
   );
 }
 
+/// Asks to update a device that still syncs with an older app.
+class OutdatedDeviceNote extends StatelessWidget {
+  const OutdatedDeviceNote({super.key, required this.device});
+  final SyncDevice device;
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.tertiaryContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              Icons.system_update_outlined,
+              color: scheme.onTertiaryContainer,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '${device.label} chưa cập nhật. Vẫn đồng bộ được nhưng '
+                'lượt ôn từ máy đó thiếu dữ liệu thời gian cho Phân tích học. '
+                'Mở app trên máy đó và cập nhật bản mới.',
+                style: TextStyle(color: scheme.onTertiaryContainer),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class SyncSettings extends StatelessWidget {
   const SyncSettings({super.key, required this.sync});
   final SyncService sync;
@@ -71,6 +108,10 @@ class SyncSettings extends StatelessWidget {
                   ? null
                   : TextStyle(color: Theme.of(context).colorScheme.error),
             ),
+            for (final d in sync.outdatedDevices) ...[
+              const SizedBox(height: 8),
+              OutdatedDeviceNote(device: d),
+            ],
             const SizedBox(height: 8),
             const Text(
               'Qua Cloudflare Worker của bạn. Học offline vẫn ghi trên máy; thay đổi được gửi khi có mạng.',

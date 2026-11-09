@@ -20,8 +20,10 @@ Future<void> main() async {
   try {
     final dir = await getApplicationSupportDirectory();
     await dir.create(recursive: true);
+    String? version;
     try {
       final info = await PackageInfo.fromPlatform();
+      version = info.version;
       await DatabaseSnapshots(dir).beforeOpen(info.version);
     } catch (_) {
       // A failed copy (e.g. disk full) must not lock the user out; sync and
@@ -45,7 +47,7 @@ Future<void> main() async {
       VocabApp(
         repository: LibraryRepository(db),
         uiScale: uiScale,
-        sync: SyncService(db)..start(),
+        sync: SyncService(db, appVersion: version)..start(),
         desktop: desktop,
       ),
     );
