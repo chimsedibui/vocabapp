@@ -6,10 +6,12 @@ import '../data/library_repository.dart';
 import '../domain/models.dart';
 import '../services/desktop_shell.dart';
 import '../services/sync_service.dart';
+import '../services/word_notifications.dart';
 import 'editors.dart';
 import 'data_settings.dart';
 import 'desktop_settings.dart';
 import 'lookup_popup.dart';
+import 'notification_settings.dart';
 import 'brand.dart';
 import 'theme.dart';
 import 'word_details.dart';
@@ -1132,6 +1134,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
     final right = [
       if (widget.desktop != null) DesktopSettings(shell: widget.desktop!),
       if (widget.sync != null) SyncSettings(sync: widget.sync!),
+      if (WordNotifications.supported) const NotificationSettings(),
       const AiSettings(),
       DataSettings(
         repository: repo,

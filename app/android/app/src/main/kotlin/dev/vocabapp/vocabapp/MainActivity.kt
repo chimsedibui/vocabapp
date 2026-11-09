@@ -1,8 +1,11 @@
 package dev.vocabapp.vocabapp
 
+import android.Manifest
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.PackageInstaller
+import android.content.pm.PackageManager
 import android.os.Build
 import android.speech.tts.TextToSpeech
 import android.widget.Toast
@@ -16,6 +19,13 @@ class MainActivity : FlutterActivity() {
     private var tts: TextToSpeech? = null
     private var ready = false
     private var pending: String? = null
+    private var permissionDone: ((Boolean) -> Unit)? = null
+
+    override fun onCreate(savedInstanceState: android.os.Bundle?) {
+        super.onCreate(savedInstanceState)
+        // A force stop (e.g. swiping the app away on ColorOS) drops the alarm.
+        WordNotifications.restore(this)
+    }
 
     // "vocabapp/speech": reads English with the device's TextToSpeech engine.
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -44,6 +54,29 @@ class MainActivity : FlutterActivity() {
                         }
                         result.success(true)
                     }
+                }
+            }
+        // "vocabapp/notify": rotating word notification, see WordNotifications.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "vocabapp/notify")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "status" -> result.success(mapOf(
+                        "enabled" to WordNotifications.enabled(this),
+                        "interval" to WordNotifications.interval(this),
+                        "allowed" to notificationsAllowed(),
+                    ))
+                    "enable" -> {
+                        val minutes = call.argument<Int>("interval") ?: 15
+                        requestNotifications { allowed ->
+                            if (allowed) WordNotifications.enable(this, minutes)
+                            result.success(allowed)
+                        }
+                    }
+                    "disable" -> {
+                        WordNotifications.disable(this)
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
                 }
             }
         // "vocabapp/update": installs a downloaded, checksum-verified APK.
@@ -89,6 +122,33 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun notificationsAllowed() =
+        (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).areNotificationsEnabled()
+
+    private fun requestNotifications(done: (Boolean) -> Unit) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        ) {
+            done(notificationsAllowed())
+            return
+        }
+        permissionDone?.invoke(false)
+        permissionDone = done
+        requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), NOTIFY_PERMISSION)
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != NOTIFY_PERMISSION) return
+        val granted = grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
+        permissionDone?.invoke(granted)
+        permissionDone = null
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         if (intent.action != INSTALL_STATUS) return
@@ -123,6 +183,7 @@ class MainActivity : FlutterActivity() {
 
     companion object {
         private const val INSTALL_STATUS = "dev.vocabapp.vocabapp.INSTALL_STATUS"
+        private const val NOTIFY_PERMISSION = 4102
     }
 
     override fun onDestroy() {
