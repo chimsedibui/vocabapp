@@ -11,6 +11,26 @@ class AppRelease {
   final Map<String, Uri> assets;
 }
 
+/// GitHub refused because of too many requests (429, or 403 with no quota left).
+class RateLimited extends UserFacingException {
+  const RateLimited(super.message);
+
+  static void check(http.BaseResponse response) {
+    final code = response.statusCode;
+    if (code != 429 &&
+        !(code == 403 && response.headers['x-ratelimit-remaining'] == '0')) {
+      return;
+    }
+    final seconds = int.tryParse(response.headers['retry-after'] ?? '');
+    final wait = seconds == null
+        ? 'vài phút'
+        : '${(seconds / 60).ceil().clamp(1, 60)} phút';
+    throw RateLimited(
+      'GitHub đang giới hạn số lượt tải (quá nhiều request). Hãy thử lại sau $wait.',
+    );
+  }
+}
+
 class ReleaseService {
   ReleaseService({http.Client? client}) : _client = client ?? http.Client();
   final http.Client _client;
@@ -48,6 +68,7 @@ class ReleaseService {
           )
           .timeout(const Duration(seconds: 20));
       if (response.statusCode == 404) return null;
+      RateLimited.check(response);
       if (response.statusCode != 200) throw const FormatException();
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       final version = data['version'] as String;
@@ -66,6 +87,8 @@ class ReleaseService {
         }
       }
       return AppRelease(version, Uri.parse(page), assets);
+    } on RateLimited {
+      rethrow;
     } catch (_) {
       throw const UserFacingException(
         'Chưa kiểm tra được bản mới. Hãy thử lại khi có mạng hoặc mở trang phát hành.',
