@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -8,6 +9,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../data/analytics_repository.dart';
 import '../data/database.dart';
 import '../data/library_repository.dart';
 import '../data/snapshots.dart';
@@ -115,6 +117,19 @@ class _DataSettingsState extends State<DataSettings> {
     );
     if (path == null) return null;
     return 'Đã sao lưu từ, nhóm, passage và toàn bộ tiến độ học.';
+  }
+
+  Future<String?> _exportReviews() async {
+    final csv = await widget.repository.reviewsCsv();
+    // BOM so Excel opens Vietnamese text as UTF-8.
+    final bytes = Uint8List.fromList(utf8.encode('\uFEFF$csv'));
+    final path = await FilePicker.saveFile(
+      dialogTitle: 'Lưu lịch sử ôn',
+      fileName: 'VocabApp-reviews-${DateTime.now().millisecondsSinceEpoch}.csv',
+      bytes: bytes,
+    );
+    if (path == null) return null;
+    return 'Đã xuất toàn bộ lượt ôn ra CSV.';
   }
 
   Future<String?> _restore() async {
@@ -271,6 +286,11 @@ class _DataSettingsState extends State<DataSettings> {
                     onPressed: _busy ? null : () => _run(_restore),
                     icon: const Icon(Icons.restore),
                     label: const Text('Khôi phục'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _busy ? null : () => _run(_exportReviews),
+                    icon: const Icon(Icons.table_chart_outlined),
+                    label: const Text('Xuất lượt ôn (CSV)'),
                   ),
                 ],
               ),

@@ -27,6 +27,7 @@ Source nằm trong [app/](app/README.md): thư viện SQLite, từ/nghĩa/nhóm,
 | [11 — Flashcard](docs/11-flashcards.md) | Hai mặt thẻ, chế độ học, lịch ôn và mở rộng chiều học |
 | [13 — API và passage thực tế](docs/13-api-and-passage.md) | Cấu hình key, trích CEFR, cache, duyệt và giới hạn |
 | [12 — GitHub, release và backup](docs/12-releases-and-backups.md) | CI tăng version, bộ cài, khóa beta và backup/restore |
+| [15 — Phân tích học tập](docs/15-learning-analytics.md) | Dữ liệu thu, chỉ số, yếu tố hành vi, gợi ý và forecast |
 
 ## Định hướng đề xuất
 

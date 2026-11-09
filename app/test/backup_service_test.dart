@@ -57,6 +57,31 @@ void main() {
     expect(BackupService(other).inspect(recovery!).entries, 0);
   });
 
+  test('v4 backups without review timing restore with empty timing', () async {
+    final root = jsonDecode(
+      utf8.decode(await BackupService(db).export()),
+    ) as Map<String, dynamic>;
+    for (final row in root['data']['review_events'] as List) {
+      (row as Map)
+        ..remove('session_id')
+        ..remove('shown_at')
+        ..remove('flipped_at');
+    }
+    root['version'] = 4;
+    root['db_version'] = 4;
+    root['sha256'] = sha256
+        .convert(utf8.encode(jsonEncode(root['data'])))
+        .toString();
+    await BackupService(other).restore(
+      Uint8List.fromList(utf8.encode(jsonEncode(root))),
+      saveRecovery: (_) async {},
+    );
+    final review = (await other.query('review_events')).single;
+    expect(review['id'], 'stored-review');
+    expect(review['session_id'], isNull);
+    expect(review['shown_at'], isNull);
+  });
+
   test(
     'modified or unsupported backups are rejected before deleting anything',
     () async {

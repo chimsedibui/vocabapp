@@ -612,84 +612,96 @@ class LibraryRepository {
 
   /// Event ID is generated on reveal and reused on retry. Review + schedule are
   /// atomic. Returns the new schedule, or null when the event was already saved.
-  Future<Schedule?> review(StudyCard snapshot, Rating rating, String eventId) =>
-      db.transaction((tx) async {
-        final previousEvent = await tx.query(
-          'review_events',
-          where: 'id=?',
-          whereArgs: [eventId],
+  ///
+  /// [sessionId], [shownAt] (card shown, front side) and [flippedAt] (answer
+  /// first revealed) feed learning analytics; see docs/15.
+  Future<Schedule?> review(
+    StudyCard snapshot,
+    Rating rating,
+    String eventId, {
+    String? sessionId,
+    DateTime? shownAt,
+    DateTime? flippedAt,
+  }) => db.transaction((tx) async {
+    final previousEvent = await tx.query(
+      'review_events',
+      where: 'id=?',
+      whereArgs: [eventId],
+    );
+    if (previousEvent.isNotEmpty) {
+      if (previousEvent.single['card_id'] != snapshot.id ||
+          previousEvent.single['rating'] != rating.name) {
+        throw const UserFacingException(
+          'Lượt ôn không khớp. Hãy mở lại phiên học.',
         );
-        if (previousEvent.isNotEmpty) {
-          if (previousEvent.single['card_id'] != snapshot.id ||
-              previousEvent.single['rating'] != rating.name) {
-            throw const UserFacingException(
-              'Lượt ôn không khớp. Hãy mở lại phiên học.',
-            );
-          }
-          return null;
-        }
-        final records = await tx.rawQuery(
-          'SELECT c.*, s.content_revision, s.status FROM cards c JOIN senses s ON s.id=c.sense_id WHERE c.id=?',
-          [snapshot.id],
-        );
-        if (records.isEmpty) {
-          throw const UserFacingException('Thẻ không còn khả dụng.');
-        }
-        final card = records.single;
-        if (card['revision'] != snapshot.revision ||
-            card['suspended'] == 1 ||
-            card['status'] != 'approved') {
-          throw const UserFacingException(
-            'Thẻ đã thay đổi. Hãy mở lại phiên học để tải nội dung mới.',
-          );
-        }
-        final now = clock().toUtc();
-        final config = (await tx.query('settings')).single;
-        final day = _studyDay(now, config['timezone'] as String);
-        if (card['state'] != 'new' &&
-            (card['due_at'] as int) > now.millisecondsSinceEpoch) {
-          throw const UserFacingException('Thẻ này chưa đến hạn ôn.');
-        }
-        final next = _scheduler.review(
-          state: card['state'] as String,
-          intervalDays: card['interval_days'] as int,
-          lapses: card['lapses'] as int,
-          rating: rating,
-          now: now,
-        );
-        await tx.insert('review_events', {
-          'id': eventId,
-          'card_id': snapshot.id,
-          'rating': rating.name,
-          'reviewed_at': now.millisecondsSinceEpoch,
-          'study_day': day,
-          'was_new': card['state'] == 'new' ? 1 : 0,
-          'device_id': config['device_id'],
-          'content_revision': card['content_revision'],
-          'scheduler_version': Scheduler.version,
-          'previous_state': card['state'],
-          'new_state': next.state,
-          'previous_interval': card['interval_days'],
-          'new_interval': next.intervalDays,
-          'previous_due': card['due_at'],
-          'new_due': next.due.millisecondsSinceEpoch,
-        });
-        await tx.update(
-          'cards',
-          {
-            'state': next.state,
-            'due_at': next.due.millisecondsSinceEpoch,
-            'interval_days': next.intervalDays,
-            'lapses': next.lapses,
-            'revision': snapshot.revision + 1,
-            'scheduler_version': Scheduler.version,
-            'last_review_id': eventId,
-          },
-          where: 'id=?',
-          whereArgs: [snapshot.id],
-        );
-        return next;
-      });
+      }
+      return null;
+    }
+    final records = await tx.rawQuery(
+      'SELECT c.*, s.content_revision, s.status FROM cards c JOIN senses s ON s.id=c.sense_id WHERE c.id=?',
+      [snapshot.id],
+    );
+    if (records.isEmpty) {
+      throw const UserFacingException('Thẻ không còn khả dụng.');
+    }
+    final card = records.single;
+    if (card['revision'] != snapshot.revision ||
+        card['suspended'] == 1 ||
+        card['status'] != 'approved') {
+      throw const UserFacingException(
+        'Thẻ đã thay đổi. Hãy mở lại phiên học để tải nội dung mới.',
+      );
+    }
+    final now = clock().toUtc();
+    final config = (await tx.query('settings')).single;
+    final day = _studyDay(now, config['timezone'] as String);
+    if (card['state'] != 'new' &&
+        (card['due_at'] as int) > now.millisecondsSinceEpoch) {
+      throw const UserFacingException('Thẻ này chưa đến hạn ôn.');
+    }
+    final next = _scheduler.review(
+      state: card['state'] as String,
+      intervalDays: card['interval_days'] as int,
+      lapses: card['lapses'] as int,
+      rating: rating,
+      now: now,
+    );
+    await tx.insert('review_events', {
+      'id': eventId,
+      'card_id': snapshot.id,
+      'rating': rating.name,
+      'reviewed_at': now.millisecondsSinceEpoch,
+      'study_day': day,
+      'was_new': card['state'] == 'new' ? 1 : 0,
+      'device_id': config['device_id'],
+      'content_revision': card['content_revision'],
+      'scheduler_version': Scheduler.version,
+      'previous_state': card['state'],
+      'new_state': next.state,
+      'previous_interval': card['interval_days'],
+      'new_interval': next.intervalDays,
+      'previous_due': card['due_at'],
+      'new_due': next.due.millisecondsSinceEpoch,
+      'session_id': sessionId,
+      'shown_at': shownAt?.toUtc().millisecondsSinceEpoch,
+      'flipped_at': flippedAt?.toUtc().millisecondsSinceEpoch,
+    });
+    await tx.update(
+      'cards',
+      {
+        'state': next.state,
+        'due_at': next.due.millisecondsSinceEpoch,
+        'interval_days': next.intervalDays,
+        'lapses': next.lapses,
+        'revision': snapshot.revision + 1,
+        'scheduler_version': Scheduler.version,
+        'last_review_id': eventId,
+      },
+      where: 'id=?',
+      whereArgs: [snapshot.id],
+    );
+    return next;
+  });
 
   /// Reverts the review [eventId] made from [snapshot] (the card as it was
   /// before), provided nothing changed the card since. Returns the card's new

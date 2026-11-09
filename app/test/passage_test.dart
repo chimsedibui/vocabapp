@@ -1043,7 +1043,7 @@ void main() {
       path,
     );
     try {
-      expect(await upgraded.getVersion(), 5);
+      expect(await upgraded.getVersion(), 6);
       expect(await upgraded.query('cards'), cards);
       expect((await upgraded.query('review_events')).single['id'], 'persisted');
       expect(await upgraded.query('passage_jobs'), isEmpty);

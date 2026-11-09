@@ -18,6 +18,7 @@ import 'ai_settings.dart';
 import 'passage_page.dart';
 import 'progress_charts.dart';
 import 'import_page.dart';
+import 'insights_page.dart';
 import 'sync_settings.dart';
 import 'ui_scale.dart';
 
@@ -589,6 +590,15 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
           ),
           const SizedBox(height: 8),
           WeekBars(counts: s.lastWeek, today: repo.clock()),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: () => _open(InsightsPage(repository: repo)),
+              icon: const Icon(Icons.insights_outlined),
+              label: const Text('Xem phân tích'),
+            ),
+          ),
         ],
       ),
     ),
