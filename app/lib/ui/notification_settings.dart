@@ -89,12 +89,12 @@ class _NotificationSettingsState extends State<NotificationSettings>
           ),
           const SizedBox(height: 8),
           const Text(
-            'Ghim một từ bạn đánh giá Quên/Khó/Tạm lên màn hình khóa và thanh thông báo, kèm phiên âm, nghĩa và ví dụ. Từ đổi khi bạn bật màn hình, không tự đánh thức máy nên rất ít tốn pin.',
+            'Ghim một từ Quên/Khó/Tạm lên màn hình khóa. Từ đổi khi bạn mở màn hình.',
           ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             value: _enabled && _allowed,
-            title: const Text('Ghim từ khó lên màn hình khóa'),
+            title: const Text('Ghim từ khó'),
             subtitle: _enabled && !_allowed
                 ? Text(
                     'Thông báo đang bị tắt trong Cài đặt Android.',
@@ -108,9 +108,7 @@ class _NotificationSettingsState extends State<NotificationSettings>
           DropdownButtonFormField<int>(
             initialValue: _interval,
             key: ValueKey(_interval),
-            decoration: const InputDecoration(
-              labelText: 'Đổi từ khi bật màn hình, cách lần trước ít nhất',
-            ),
+            decoration: const InputDecoration(labelText: 'Đổi từ sau ít nhất'),
             items: [
               for (final m in WordNotifications.intervals)
                 DropdownMenuItem(value: m, child: Text('$m phút')),
@@ -128,7 +126,7 @@ class _NotificationSettingsState extends State<NotificationSettings>
           ),
           const SizedBox(height: 12),
           Text(
-            'Máy OPPO/OnePlus/Realme (ColorOS) và một số hãng khác chặn app chạy nền: hãy bật "Tự khởi động" và "Cho phép hoạt động nền" cho VocabApp, nếu không từ chỉ hiện lại sau khi bạn mở app (ví dụ sau khi khởi động lại máy).',
+            'Máy OPPO/OnePlus/Realme: bật "Tự khởi động" và "Hoạt động nền" để từ tự hiện lại sau khi khởi động máy.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           TextButton.icon(
@@ -137,7 +135,7 @@ class _NotificationSettingsState extends State<NotificationSettings>
                   /* No settings screen on this device. */
                 }),
             icon: const Icon(Icons.settings_outlined),
-            label: const Text('Mở cài đặt ứng dụng'),
+            label: const Text('Cài đặt ứng dụng'),
           ),
         ],
       ),
