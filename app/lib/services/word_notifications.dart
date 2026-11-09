@@ -28,4 +28,8 @@ class WordNotifications {
       false;
 
   static Future<void> disable() => _channel.invokeMethod('disable');
+
+  /// Opens this app's system settings page (battery, auto-launch).
+  static Future<void> openAppSettings() =>
+      _channel.invokeMethod('openAppSettings');
 }

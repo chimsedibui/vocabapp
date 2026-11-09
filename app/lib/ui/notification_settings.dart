@@ -126,6 +126,19 @@ class _NotificationSettingsState extends State<NotificationSettings>
                     }
                   },
           ),
+          const SizedBox(height: 12),
+          Text(
+            'Máy OPPO/OnePlus/Realme (ColorOS) và một số hãng khác chặn app chạy nền: hãy bật "Tự khởi động" và "Cho phép hoạt động nền" cho VocabApp, nếu không từ chỉ hiện lại sau khi bạn mở app (ví dụ sau khi khởi động lại máy).',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          TextButton.icon(
+            onPressed: () =>
+                WordNotifications.openAppSettings().catchError((_) {
+                  /* No settings screen on this device. */
+                }),
+            icon: const Icon(Icons.settings_outlined),
+            label: const Text('Mở cài đặt ứng dụng'),
+          ),
         ],
       ),
     ),
