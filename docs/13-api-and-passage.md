@@ -57,10 +57,10 @@ Chưa có Google dịch dự phòng cho nhập từ đơn; Google không thể t
 
 ## Ghim từ lên màn hình khóa (Android)
 
-Cài đặt → Thông báo từ vựng: bật "Ghim từ khó lên màn hình khóa", chọn khoảng tối thiểu 10/15/20 phút. Một thông báo ghim (ongoing) trên màn hình khóa và thanh thông báo hiện một từ có lần đánh giá gần nhất là Quên/Khó/Tạm (không tính thẻ tạm dừng), kèm IPA, từ loại, nghĩa và ví dụ. Không kêu, không rung (kênh `word_rotation_v2`, IMPORTANCE_DEFAULT không âm thanh; LOW bị nhiều màn hình khóa ẩn). Nút "Từ khác" đổi ngay, "Tắt" tắt hẳn; chạm mở app. Không lặp lại 5 từ vừa hiện khi còn từ khác. Chưa có từ khó thì hiện hướng dẫn.
+Cài đặt → Thông báo từ vựng: bật "Ghim từ khó lên màn hình khóa", chọn khoảng tối thiểu 10/15/20 phút. Một thông báo ghim (ongoing) trên màn hình khóa và thanh thông báo hiện một từ có lần đánh giá gần nhất là Quên/Khó/Tạm (không tính thẻ tạm dừng), kèm IPA, từ loại, nghĩa và ví dụ. Không kêu, không rung (kênh `word_rotation_v2`, IMPORTANCE_DEFAULT không âm thanh; LOW bị nhiều màn hình khóa ẩn). Nút "Từ khác" đổi ngay, "Tắt" tắt hẳn; chạm mở app. Vuốt bỏ (Android 14+ cho phép với thông báo foreground service) cũng đổi sang từ khác ngay, vì không còn thông báo hiển thị thì ColorOS đóng băng app và nó không tự hiện lại được. Không lặp lại 5 từ vừa hiện khi còn từ khác. Chưa có từ khó thì hiện hướng dẫn.
 
 - Đổi từ khi màn hình bật (`ACTION_SCREEN_ON`) và đã qua khoảng đã chọn. Không dùng alarm: máy không bị đánh thức, và ColorOS (dời alarm nền của app tới vài ngày) không chặn được.
 - `WordService` là foreground service loại `specialUse`, giữ thông báo ghim và receiver màn hình; đọc thẳng `filesDir/vocabulary.db`. Ghim vì ColorOS ẩn trên màn hình khóa các thông báo thường đã xem trước khi khóa.
 - Cài đặt ở SharedPreferences `word_notifications`; service khởi động lại khi mở app, `BOOT_COMPLETED`, `MY_PACKAGE_REPLACED` (force stop, ví dụ vuốt tắt trên ColorOS, sẽ dừng service tới lần mở app sau).
-- Android 13+ hỏi quyền `POST_NOTIFICATIONS` khi bật. Trên ColorOS nên cho phép VocabApp chạy nền để service không bị tắt.
+- Android 13+ hỏi quyền `POST_NOTIFICATIONS` khi bật. ColorOS không gửi `BOOT_COMPLETED`/`MY_PACKAGE_REPLACED` cho app chưa được "Tự khởi động"; thẻ cài đặt nhắc bật "Tự khởi động" và "Cho phép hoạt động nền", có nút mở trang cài đặt ứng dụng.
 - Bản debug có id `dev.vocabapp.vocabapp.debug` ("VocabApp Dev") để cài cạnh bản phát hành khi test.

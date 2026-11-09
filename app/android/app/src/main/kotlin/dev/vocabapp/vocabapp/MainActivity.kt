@@ -76,6 +76,13 @@ class MainActivity : FlutterActivity() {
                         WordNotifications.disable(this)
                         result.success(null)
                     }
+                    "openAppSettings" -> {
+                        startActivity(
+                            Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                                .setData(android.net.Uri.fromParts("package", packageName, null)),
+                        )
+                        result.success(null)
+                    }
                     else -> result.notImplemented()
                 }
             }

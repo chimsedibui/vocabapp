@@ -213,6 +213,10 @@ object WordNotifications {
             .setOnlyAlertOnce(true)
             .setShowWhen(false)
             .setContentIntent(open)
+            // Swiping it away (possible for foreground-service notifications on
+            // Android 14+) shows the next word: without a visible notification
+            // ColorOS freezes the process, so it could never come back by itself.
+            .setDeleteIntent(broadcast(context, ACTION_NEXT, 3))
         if (word != null) {
             builder.addAction(Notification.Action.Builder(null, "Từ khác", broadcast(context, ACTION_NEXT, 1)).build())
         }
