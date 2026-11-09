@@ -49,3 +49,50 @@ class WordDetails extends StatelessWidget {
     );
   }
 }
+
+/// Example sentence (or import note) in italics, with [term] in bold.
+class ExampleText extends StatelessWidget {
+  const ExampleText(
+    this.text, {
+    super.key,
+    required this.term,
+    this.textAlign = TextAlign.start,
+    this.maxLines,
+    this.style,
+  });
+  final String text, term;
+  final TextAlign textAlign;
+  final int? maxLines;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context) {
+    final base = (style ?? const TextStyle()).copyWith(
+      fontStyle: FontStyle.italic,
+      color: style?.color ?? Theme.of(context).colorScheme.outline,
+    );
+    final spans = <TextSpan>[];
+    var start = 0;
+    if (term.trim().isNotEmpty) {
+      final pattern = RegExp(RegExp.escape(term.trim()), caseSensitive: false);
+      for (final m in pattern.allMatches(text)) {
+        spans
+          ..add(TextSpan(text: text.substring(start, m.start)))
+          ..add(
+            TextSpan(
+              text: m.group(0),
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          );
+        start = m.end;
+      }
+    }
+    spans.add(TextSpan(text: text.substring(start)));
+    return Text.rich(
+      TextSpan(style: base, children: spans),
+      textAlign: textAlign,
+      maxLines: maxLines,
+      overflow: maxLines == null ? null : TextOverflow.ellipsis,
+    );
+  }
+}

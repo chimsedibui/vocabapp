@@ -12,6 +12,7 @@ import '../services/ai_configuration.dart';
 import '../services/passage_service.dart';
 import 'ai_settings.dart';
 import 'editors.dart';
+import 'word_details.dart';
 
 class PassagePage extends StatefulWidget {
   const PassagePage({
@@ -33,9 +34,10 @@ class _Proposal {
       level = item.level,
       partOfSpeech = item.partOfSpeech,
       pronunciation = item.pronunciation,
+      example = item.example,
       meaning = TextEditingController(text: item.meaning);
   final String term;
-  final String? partOfSpeech, pronunciation;
+  final String? partOfSpeech, pronunciation, example;
   String level;
   final TextEditingController meaning;
   bool selected = true;
@@ -47,6 +49,7 @@ class _Proposal {
     meaning.text,
     partOfSpeech: partOfSpeech,
     pronunciation: pronunciation,
+    example: example,
   );
 }
 
@@ -565,17 +568,24 @@ class _PassagePageState extends State<PassagePage> {
           ),
         ),
         _cell(
-          TextField(
-            key: ValueKey('meaning-${p.term}'),
-            controller: p.meaning,
-            enabled: !_busy && p.existingSense == null,
-            maxLength: 160,
-            maxLines: null,
-            decoration: const InputDecoration(
-              isDense: true,
-              counterText: '',
-              border: InputBorder.none,
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                key: ValueKey('meaning-${p.term}'),
+                controller: p.meaning,
+                enabled: !_busy && p.existingSense == null,
+                maxLength: 160,
+                maxLines: null,
+                decoration: const InputDecoration(
+                  isDense: true,
+                  counterText: '',
+                  border: InputBorder.none,
+                ),
+              ),
+              if (p.example case final example?)
+                ExampleText(example, term: p.term),
+            ],
           ),
         ),
         _cell(

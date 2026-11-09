@@ -25,6 +25,7 @@ Triển khai ngày 19/10/2026. Phần này ghi hành vi thực tế, bổ sung c
 ## Loại từ, phiên âm và phát âm
 
 - Contract v2 (cache key `passage-v2`): mỗi mục thêm `pos` (enum: noun, verb, adjective, adverb, pronoun, preposition, conjunction, interjection, determiner, phrase, other — cùng danh sách với import) và `ipa` (IPA Mỹ, không dấu gạch chéo). Hai trường này là phụ: giá trị lạ/IPA > 80 ký tự bị bỏ, không làm hỏng cả kết quả. Kết quả v1 đã lưu (3 trường) vẫn mở/duyệt được; trường lạ khác vẫn bị từ chối.
+- Contract v3 (cache key `passage-v3`): thêm `example` — câu trong passage chứa từ (rút gọn nếu > 25 từ), lưu vào cột `note` của sense. Phụ như pos/ipa: rỗng hoặc > 240 ký tự thì bỏ. Hiện ở mặt sau thẻ ôn, danh sách từ, popup tra và bảng duyệt (từ được in đậm). Output tối thiểu tăng 2.500 → 3.500 token, context window tối thiểu 7.500.
 - Duyệt: nghĩa mới lưu `part_of_speech`/`pronunciation`; nghĩa có sẵn chỉ được điền chỗ trống, không ghi đè giá trị người dùng/import đã đặt.
 - Form sửa từ có Từ loại + Phiên âm IPA; IPA lưu không kèm `/…/` hoặc `[…]` (import cũng chuẩn hóa như vậy).
 - Nút loa đọc từ bằng giọng có sẵn của máy, offline: Windows dùng SAPI (ưu tiên giọng en-US, cả OneCore), Android dùng TextToSpeech (`Locale.US`). Không có giọng tiếng Anh thì báo, không đọc bằng giọng khác.

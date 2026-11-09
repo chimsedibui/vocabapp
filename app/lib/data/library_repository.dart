@@ -171,6 +171,7 @@ class LibraryRepository {
             suspended: false,
             partOfSpeech: r['part_of_speech'] as String?,
             pronunciation: r['pronunciation'] as String?,
+            note: r['note'] as String?,
           ),
         )
         .toList();
@@ -487,7 +488,7 @@ class LibraryRepository {
     if (draftsOnly) conditions.add("s.status='draft'");
     final rows = await db.rawQuery(
       '''SELECT e.id entry_id, e.term, s.id sense_id, s.meaning, s.sense_key, s.status,
-      s.part_of_speech, s.pronunciation,
+      s.part_of_speech, s.pronunciation, s.note,
       coalesce(c.suspended,0) suspended,
       (SELECT group_concat(d.name, ', ') FROM decks d JOIN deck_entries de ON de.deck_id=d.id WHERE de.entry_id=e.id AND d.archived=0) groups
       FROM senses s JOIN entries e ON s.entry_id=e.id LEFT JOIN cards c ON c.sense_id=s.id
@@ -507,6 +508,7 @@ class LibraryRepository {
             suspended: r['suspended'] == 1,
             partOfSpeech: r['part_of_speech'] as String?,
             pronunciation: r['pronunciation'] as String?,
+            note: r['note'] as String?,
           ),
         )
         .toList();
@@ -578,7 +580,7 @@ class LibraryRepository {
         : 'AND EXISTS(SELECT 1 FROM deck_entries de WHERE de.entry_id=e.id AND de.deck_id=?)';
     const base =
         '''SELECT c.*, e.term, s.meaning, s.sense_key, s.part_of_speech,
-      s.pronunciation FROM cards c
+      s.pronunciation, s.note FROM cards c
       JOIN senses s ON s.id=c.sense_id JOIN entries e ON e.id=s.entry_id
       WHERE c.suspended=0 AND s.status='approved' ''';
     final due = await tx.rawQuery(
@@ -602,6 +604,7 @@ class LibraryRepository {
             revision: r['revision'] as int,
             partOfSpeech: r['part_of_speech'] as String?,
             pronunciation: r['pronunciation'] as String?,
+            note: r['note'] as String?,
           ),
         )
         .toList();

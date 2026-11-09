@@ -932,6 +932,8 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
                   partOfSpeech: word.partOfSpeech,
                   pronunciation: word.pronunciation,
                 ),
+              if (word.note case final note? when note.isNotEmpty)
+                ExampleText(note, term: word.term, maxLines: 2),
               if (word.groups.isNotEmpty) ...[
                 const SizedBox(height: 4),
                 Text(
