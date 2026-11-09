@@ -53,8 +53,8 @@ class BackupService {
       utf8.encode(
         jsonEncode({
           'format': 'vocabapp-backup',
-          'version': 5,
-          'db_version': 5,
+          'version': 4,
+          'db_version': 4,
           'created_at': DateTime.now().toUtc().toIso8601String(),
           'sha256': sha256.convert(utf8.encode(payload)).toString(),
           'data': rows,
@@ -77,8 +77,7 @@ class BackupService {
           !((root['version'] == 1 && root['db_version'] == 1) ||
               (root['version'] == 2 && root['db_version'] == 2) ||
               (root['version'] == 3 && root['db_version'] == 3) ||
-              (root['version'] == 4 && root['db_version'] == 4) ||
-              (root['version'] == 5 && root['db_version'] == 5))) {
+              (root['version'] == 4 && root['db_version'] == 4))) {
         throw const FormatException();
       }
       final data = root['data'] as Map<String, dynamic>;
@@ -102,14 +101,6 @@ class BackupService {
         data['sense_origins'] = <dynamic>[];
       }
       if ((root['version'] as int) < 4) data['sense_history'] = <dynamic>[];
-      if ((root['version'] as int) < 5) {
-        for (final row in data['review_events'] as List) {
-          for (final field in ['session_id', 'shown_at', 'flipped_at']) {
-            if ((row as Map).containsKey(field)) throw const FormatException();
-            row[field] = null;
-          }
-        }
-      }
       if ((root['version'] as int) < 3) {
         data['import_batches'] = <dynamic>[];
         for (final row in data['senses'] as List) {
