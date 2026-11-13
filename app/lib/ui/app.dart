@@ -582,18 +582,6 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
               progress,
               if (drafts != null) ...[const SizedBox(height: 16), drafts],
             ],
-            const SizedBox(height: 24),
-            const Row(
-              children: [
-                Icon(Icons.offline_bolt_outlined, size: 18),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Học offline · Không cần tài khoản · Không cần API',
-                  ),
-                ),
-              ],
-            ),
           ],
         );
       },
@@ -1075,7 +1063,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       ) ??
       false;
 
-  Widget _section(String title, String body, List<Widget> children) => Card(
+  Widget _section(String title, String? body, List<Widget> children) => Card(
     margin: EdgeInsets.zero,
     child: Padding(
       padding: const EdgeInsets.all(24),
@@ -1086,8 +1074,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
             title,
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
           ),
-          const SizedBox(height: 8),
-          Text(body),
+          if (body != null) ...[const SizedBox(height: 8), Text(body)],
           if (children.isNotEmpty) const SizedBox(height: 16),
           ...children,
         ],
@@ -1097,41 +1084,37 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
 
   Widget _displayCard(UiScaleController scale) => ValueListenableBuilder(
     valueListenable: scale,
-    builder: (context, value, _) => _section(
-      'Cỡ giao diện',
-      'Phóng to hoặc thu nhỏ toàn bộ chữ, nút và khoảng cách. Trên máy tính dùng Ctrl + / Ctrl − / Ctrl 0.',
-      [
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            IconButton.outlined(
-              tooltip: 'Thu nhỏ',
-              onPressed: scale.canZoomOut ? scale.zoomOut : null,
-              icon: const Icon(Icons.remove),
+    builder: (context, value, _) => _section('Cỡ giao diện', null, [
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          IconButton.outlined(
+            tooltip: 'Thu nhỏ',
+            onPressed: scale.canZoomOut ? scale.zoomOut : null,
+            icon: const Icon(Icons.remove),
+          ),
+          SizedBox(
+            width: 64,
+            child: Text(
+              '${(value * 100).round()}%',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleMedium,
             ),
-            SizedBox(
-              width: 64,
-              child: Text(
-                '${(value * 100).round()}%',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-            ),
-            IconButton.outlined(
-              tooltip: 'Phóng to',
-              onPressed: scale.canZoomIn ? scale.zoomIn : null,
-              icon: const Icon(Icons.add),
-            ),
-            TextButton(
-              onPressed: value == 1 ? null : scale.reset,
-              child: const Text('Mặc định'),
-            ),
-          ],
-        ),
-      ],
-    ),
+          ),
+          IconButton.outlined(
+            tooltip: 'Phóng to',
+            onPressed: scale.canZoomIn ? scale.zoomIn : null,
+            icon: const Icon(Icons.add),
+          ),
+          TextButton(
+            onPressed: value == 1 ? null : scale.reset,
+            child: const Text('Mặc định'),
+          ),
+        ],
+      ),
+    ]),
   );
 
   Widget _settings(_Overview data) {
@@ -1139,7 +1122,7 @@ class _LibraryHomeState extends State<LibraryHome> with WidgetsBindingObserver {
       if (widget.uiScale != null) _displayCard(widget.uiScale!),
       _section(
         'Thư viện riêng trên thiết bị',
-        'Ngôn ngữ: Anh → Việt\nNgày học: múi giờ Việt Nam (UTC+7)\nMỗi phiên: tối đa 20 thẻ\n\nThư viện được lưu trên thiết bị và đồng bộ giữa các máy khi bật mục Đồng bộ. Sao lưu vẫn nên làm định kỳ.',
+        'Ngôn ngữ: Anh → Việt\nNgày học: múi giờ Việt Nam (UTC+7)\nMỗi phiên: tối đa 20 thẻ',
         const [],
       ),
     ];

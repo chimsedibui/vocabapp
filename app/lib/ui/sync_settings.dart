@@ -112,11 +112,6 @@ class SyncSettings extends StatelessWidget {
               const SizedBox(height: 8),
               OutdatedDeviceNote(device: d),
             ],
-            const SizedBox(height: 8),
-            const Text(
-              'Qua Cloudflare Worker của bạn. Học offline vẫn ghi trên máy; thay đổi được gửi khi có mạng.',
-              style: TextStyle(fontSize: 13),
-            ),
             const SizedBox(height: 16),
             Wrap(
               spacing: 12,
@@ -222,7 +217,7 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
           padding: const EdgeInsets.all(20),
           children: [
             const Text(
-              'Nhập địa chỉ Worker và mã đồng bộ (SYNC_TOKEN) đã tạo khi deploy theo server/sync-worker/README.md. Dùng cùng cấu hình trên máy tính và điện thoại. Mã lưu trong kho bảo mật của thiết bị, không nằm trong file sao lưu.',
+              'Dùng cùng địa chỉ Worker và SYNC_TOKEN trên mọi thiết bị (xem server/sync-worker/README.md).',
             ),
             const SizedBox(height: 20),
             TextField(

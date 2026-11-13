@@ -268,10 +268,6 @@ class _DataSettingsState extends State<DataSettings> {
                 'Sao lưu và chuyển thiết bị',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
               ),
-              const SizedBox(height: 12),
-              const Text(
-                'File sao lưu giữ từ, tiến độ và passage có văn bản nguồn. Không chứa API key. Khôi phục thay thế thư viện hiện tại; không tự gộp hai thiết bị.',
-              ),
               const SizedBox(height: 16),
               Wrap(
                 spacing: 12,
@@ -298,10 +294,6 @@ class _DataSettingsState extends State<DataSettings> {
               const Text(
                 'Bản tự lưu trước khi cập nhật',
                 style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Mỗi lần mở phiên bản mới, app tự chép thư viện trước khi nâng cấp dữ liệu. Giữ 5 bản gần nhất trên thiết bị.',
               ),
               if (_snapshotFiles.isEmpty)
                 const Padding(
@@ -346,10 +338,6 @@ class _DataSettingsState extends State<DataSettings> {
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
                 ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Bản mới được phát hành trên GitHub. Chỉ kiểm tra khi bạn chọn; có thể cập nhật ngay trong app.',
               ),
               const SizedBox(height: 16),
               Wrap(

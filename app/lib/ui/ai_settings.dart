@@ -11,9 +11,7 @@ class AiSettings extends StatelessWidget {
     child: ListTile(
       leading: const Icon(Icons.key_outlined),
       title: const Text('API trích từ vựng'),
-      subtitle: const Text(
-        'OpenAI / Azure OpenAI / Gemini · key lưu riêng trên thiết bị',
-      ),
+      subtitle: const Text('OpenAI / Azure OpenAI / Gemini'),
       trailing: const Icon(Icons.chevron_right),
       onTap: () => Navigator.push(
         context,
@@ -246,9 +244,7 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
                 ? null
                 : (v) => setState(() => fields.structured = v),
             title: const Text('Structured Outputs'),
-            subtitle: const Text(
-              'Tắt nếu model chỉ hỗ trợ JSON mode. App luôn kiểm tra kết quả lại.',
-            ),
+            subtitle: const Text('Tắt nếu model chỉ hỗ trợ JSON mode.'),
           ),
         ],
       ),
@@ -265,10 +261,6 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
           child: ListView(
             padding: const EdgeInsets.all(20),
             children: [
-              const Text(
-                'Key dùng cho tài khoản của bạn, lưu bằng kho bảo mật hệ điều hành. Không kèm trong backup hoặc gửi lên GitHub. Passage chỉ gửi khi bạn bấm Trích từ, tới dịch vụ đã chọn và dự phòng nếu bật.',
-              ),
-              const SizedBox(height: 16),
               _fields(_primary, 'Dịch vụ chính'),
               SwitchListTile(
                 value: _fallbackEnabled,
@@ -276,9 +268,6 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
                     ? null
                     : (v) => setState(() => _fallbackEnabled = v),
                 title: const Text('Cho phép dịch vụ dự phòng'),
-                subtitle: const Text(
-                  'Tổng tối đa 3 HTTP attempts/job. Từ chối nội dung hoặc hủy sẽ không chuyển dịch vụ.',
-                ),
               ),
               if (_fallbackEnabled) _fields(_fallback, 'Dịch vụ dự phòng'),
               if (_error != null)

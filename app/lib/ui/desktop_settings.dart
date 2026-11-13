@@ -21,14 +21,11 @@ class DesktopSettings extends StatelessWidget {
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Bấm X để thu xuống khay hệ thống. Thoát hẳn bằng chuột phải vào biểu tượng VocabApp ở khay.',
-            ),
+            const Text('Bấm X để thu xuống khay; thoát hẳn từ menu ở khay.'),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               value: shell.autostart,
               title: const Text('Mở cùng Windows'),
-              subtitle: const Text('Khởi động ẩn dưới khay khi đăng nhập.'),
               onChanged: (v) async {
                 try {
                   await shell.setAutostart(v);
