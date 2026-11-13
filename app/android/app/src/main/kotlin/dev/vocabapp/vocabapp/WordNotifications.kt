@@ -5,19 +5,29 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.app.job.JobInfo
+import android.app.job.JobParameters
+import android.app.job.JobScheduler
+import android.app.job.JobService
 import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.database.sqlite.SQLiteDatabase
 import android.graphics.Typeface
+import android.hardware.display.DisplayManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.StyleSpan
+import android.view.Display
 import java.io.File
+import java.util.concurrent.Executors
 
 /**
  * Pinned word on the lock screen: [WordService] keeps one ongoing notification
@@ -25,18 +35,22 @@ import java.io.File
  * part of speech, meaning and example.
  *
  * The word changes when the screen turns on and at least [interval] minutes
- * have passed since the last change, or on "Từ khác". There are no alarms, so
- * the phone is never woken for this, and OEM alarm deferral (ColorOS pushes
- * background alarms days out) does not apply. Ongoing, because lock screens
- * such as ColorOS hide ordinary notifications seen before locking.
+ * have passed since the last change, or on "Từ khác". Ongoing, because lock
+ * screens such as ColorOS hide ordinary notifications seen before locking.
  *
- * Runs without the Flutter engine and reads `vocabulary.db` directly; settings
- * live in SharedPreferences so boot and app updates can restart the service.
+ * When enabled, [MainActivity] closes and removes its task from Recents once
+ * the learner leaves the app, so the Flutter UI does not stay in RAM (~42 MB
+ * PSS instead of ~240 MB) and swiping Recents does not kill the pinned word.
+ * [WordJobService] also provides a persisted JobScheduler fallback if the OS
+ * ever stops the background service.
  */
 object WordNotifications {
     const val ACTION_NEXT = "dev.vocabapp.vocabapp.WORD_NEXT"
     const val ACTION_STOP = "dev.vocabapp.vocabapp.WORD_STOP"
+    const val EXTRA_FORCE = "force"
     const val NOTIFICATION_ID = 4101
+    private const val PERIODIC_JOB_ID = 4102
+    private const val RECOVERY_JOB_ID = 4103
     val intervals = listOf(10, 15, 20)
 
     // v2: DEFAULT importance; LOW ("silent") is hidden on most lock screens.
@@ -53,33 +67,83 @@ object WordNotifications {
     fun interval(context: Context) = prefs(context).getInt("interval", 15)
 
     fun enable(context: Context, minutes: Int) {
+        val coerced = minutes.coerceIn(intervals.first(), intervals.last())
         prefs(context).edit()
             .putBoolean("enabled", true)
-            .putInt("interval", minutes.coerceIn(intervals.first(), intervals.last()))
+            .putInt("interval", coerced)
             .putLong("changed_at", 0)
             .apply()
-        start(context)
+        schedulePeriodicJob(context, coerced)
+        start(context, force = true)
     }
 
     fun disable(context: Context) {
         prefs(context).edit().putBoolean("enabled", false).apply()
+        cancelJobs(context)
         context.stopService(Intent(context, WordService::class.java))
         manager(context).cancel(NOTIFICATION_ID)
     }
 
-    /** Restarts the service after boot, an app update or a force stop. */
+    /** Restarts the service after boot, an app update, a periodic job or a force stop. */
     fun restore(context: Context) {
-        if (enabled(context)) runCatching { start(context) }
+        if (!enabled(context)) return
+        schedulePeriodicJob(context, interval(context))
+        // Ensure the notification is visible and up to date even if Android 12+
+        // blocks starting a foreground service from a background JobService.
+        if (due(context) || !isNotificationActive(context)) {
+            runCatching { rotate(context) }
+        }
+        runCatching { start(context) }
     }
 
-    private fun start(context: Context) {
-        val intent = Intent(context, WordService::class.java)
+    private fun start(context: Context, force: Boolean = false) {
+        val intent = Intent(context, WordService::class.java).putExtra(EXTRA_FORCE, force)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             context.startForegroundService(intent)
         } else {
             context.startService(intent)
         }
     }
+
+    private fun scheduler(context: Context) =
+        context.getSystemService(Context.JOB_SCHEDULER_SERVICE) as JobScheduler
+
+    private fun schedulePeriodicJob(context: Context, minutes: Int) {
+        val scheduler = scheduler(context)
+        val periodMs = maxOf(minutes, 15) * 60_000L
+        val existing = scheduler.allPendingJobs.firstOrNull { it.id == PERIODIC_JOB_ID }
+        if (existing != null && existing.intervalMillis == periodMs) return
+        val component = ComponentName(context, WordJobService::class.java)
+        val info = JobInfo.Builder(PERIODIC_JOB_ID, component)
+            .setPeriodic(periodMs)
+            .setPersisted(true)
+            .build()
+        runCatching { scheduler.schedule(info) }
+    }
+
+    fun scheduleRecoveryJob(context: Context) {
+        if (!enabled(context)) return
+        val component = ComponentName(context, WordJobService::class.java)
+        val info = JobInfo.Builder(RECOVERY_JOB_ID, component)
+            .setMinimumLatency(2_000L)
+            .setOverrideDeadline(5_000L)
+            .setPersisted(true)
+            .build()
+        runCatching { scheduler(context).schedule(info) }
+    }
+
+    private fun cancelJobs(context: Context) {
+        val scheduler = scheduler(context)
+        runCatching {
+            scheduler.cancel(PERIODIC_JOB_ID)
+            scheduler.cancel(RECOVERY_JOB_ID)
+        }
+    }
+
+    private fun isNotificationActive(context: Context): Boolean =
+        runCatching {
+            manager(context).activeNotifications.any { it.id == NOTIFICATION_ID }
+        }.getOrDefault(false)
 
     /** True when the word is due to change: [interval] minutes since the last one. */
     fun due(context: Context) =
@@ -245,26 +309,41 @@ object WordNotifications {
 
 /**
  * Foreground service that owns the pinned notification and listens for the
- * screen turning on (only possible with a registered, not manifest, receiver).
+ * screen turning on.
  */
 class WordService : Service() {
     private var started = false
-    private val screenOn = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            if (!WordNotifications.due(context)) return
-            val pending = goAsync()
-            Thread {
-                try {
-                    WordNotifications.rotate(context.applicationContext)
-                } finally {
-                    pending.finish()
-                }
-            }.start()
+
+    // One worker: a second screen-on event sees the first one's change time.
+    private val worker = Executors.newSingleThreadExecutor()
+
+    private fun onScreenOn() = worker.execute {
+        if (WordNotifications.due(this)) WordNotifications.rotate(this)
+    }
+
+    // ColorOS often skips ACTION_SCREEN_ON for backgrounded apps ("oplus skip
+    // sp"), while OplusBinderProxy replays IDisplayManagerCallback on LcdOn;
+    // keep both signals.
+    private val displays by lazy { getSystemService(DISPLAY_SERVICE) as DisplayManager }
+    private var lastState = Display.STATE_UNKNOWN
+    private val displayListener = object : DisplayManager.DisplayListener {
+        override fun onDisplayChanged(displayId: Int) {
+            if (displayId != Display.DEFAULT_DISPLAY) return
+            val state = displays.getDisplay(displayId)?.state ?: return
+            if (state == Display.STATE_ON && lastState != Display.STATE_ON) onScreenOn()
+            lastState = state
         }
+        override fun onDisplayAdded(displayId: Int) = Unit
+        override fun onDisplayRemoved(displayId: Int) = Unit
+    }
+    private val screenOn = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) = onScreenOn()
     }
 
     override fun onCreate() {
         super.onCreate()
+        lastState = displays.getDisplay(Display.DEFAULT_DISPLAY)?.state ?: Display.STATE_UNKNOWN
+        displays.registerDisplayListener(displayListener, Handler(Looper.getMainLooper()))
         registerReceiver(screenOn, IntentFilter(Intent.ACTION_SCREEN_ON))
     }
 
@@ -273,8 +352,10 @@ class WordService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        // Opening the app restarts the service; keep the word unless it is due.
-        if (started && !WordNotifications.due(this)) return START_STICKY
+        // Opening the app restarts the service; keep the word unless it is due
+        // or the learner just turned the feature on.
+        val force = intent?.getBooleanExtra(WordNotifications.EXTRA_FORCE, false) == true
+        if (started && !force && !WordNotifications.due(this)) return START_STICKY
         started = true
         // Must be foreground within seconds of startForegroundService; the
         // query is a single small SELECT.
@@ -291,12 +372,42 @@ class WordService : Service() {
         return START_STICKY
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        if (WordNotifications.enabled(this)) {
+            WordNotifications.scheduleRecoveryJob(this)
+        }
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onDestroy() {
+        displays.unregisterDisplayListener(displayListener)
         unregisterReceiver(screenOn)
+        worker.shutdown()
         super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+}
+
+/**
+ * Persisted JobScheduler fallback that keeps the pinned word alive and rotated
+ * even if the OS cleaner stops [WordService] in the background.
+ */
+class WordJobService : JobService() {
+    override fun onStartJob(params: JobParameters?): Boolean {
+        if (!WordNotifications.enabled(this)) return false
+        val app = applicationContext
+        Thread {
+            try {
+                WordNotifications.restore(app)
+            } finally {
+                if (params != null) jobFinished(params, false)
+            }
+        }.start()
+        return true
+    }
+
+    override fun onStopJob(params: JobParameters?): Boolean = true
 }
 
 class WordNotificationReceiver : BroadcastReceiver() {
@@ -310,7 +421,10 @@ class WordNotificationReceiver : BroadcastReceiver() {
                         WordNotifications.restore(app)
                     WordNotifications.ACTION_STOP -> WordNotifications.disable(app)
                     WordNotifications.ACTION_NEXT ->
-                        if (WordNotifications.enabled(app)) WordNotifications.rotate(app)
+                        if (WordNotifications.enabled(app)) {
+                            WordNotifications.rotate(app)
+                            WordNotifications.restore(app)
+                        }
                 }
             } finally {
                 pending.finish()

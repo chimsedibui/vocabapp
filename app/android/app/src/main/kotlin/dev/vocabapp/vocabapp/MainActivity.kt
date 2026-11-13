@@ -1,12 +1,16 @@
 package dev.vocabapp.vocabapp
 
 import android.Manifest
+import android.app.ActivityManager
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.widget.Toast
 import io.flutter.embedding.android.FlutterActivity
@@ -20,11 +24,63 @@ class MainActivity : FlutterActivity() {
     private var ready = false
     private var pending: String? = null
     private var permissionDone: ((Boolean) -> Unit)? = null
+    private var externalActivityOpen = false
+    private val closeHandler = Handler(Looper.getMainLooper())
+    private val closeUi = Runnable {
+        if (!isDestroyed && !isFinishing && WordNotifications.enabled(this)) {
+            finishAndRemoveTask()
+        }
+    }
 
-    override fun onCreate(savedInstanceState: android.os.Bundle?) {
+    override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // A force stop (e.g. swiping the app away on ColorOS) drops the alarm.
+        // A force stop (e.g. swiping the app away on ColorOS) drops the service.
         WordNotifications.restore(this)
+        syncRecentsTask()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        closeHandler.removeCallbacks(closeUi)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        externalActivityOpen = false
+        closeHandler.removeCallbacks(closeUi)
+        syncRecentsTask()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (!isChangingConfigurations && !externalActivityOpen && WordNotifications.enabled(this)) {
+            // Give on-pause sync a few seconds to complete, then release the
+            // Flutter UI so only the small WordService anchor stays in RAM.
+            closeHandler.removeCallbacks(closeUi)
+            closeHandler.postDelayed(closeUi, 3_000L)
+        }
+    }
+
+    override fun startActivityForResult(intent: Intent, requestCode: Int, options: Bundle?) {
+        externalActivityOpen = true
+        closeHandler.removeCallbacks(closeUi)
+        super.startActivityForResult(intent, requestCode, options)
+    }
+
+    override fun finish() {
+        if (WordNotifications.enabled(this)) {
+            finishAndRemoveTask()
+        } else {
+            super.finish()
+        }
+    }
+
+    private fun syncRecentsTask() {
+        val hideFromRecents = WordNotifications.enabled(this)
+        val manager = getSystemService(ACTIVITY_SERVICE) as ActivityManager
+        manager.appTasks.forEach { task ->
+            runCatching { task.setExcludeFromRecents(hideFromRecents) }
+        }
     }
 
     // "vocabapp/speech": reads English with the device's TextToSpeech engine.
@@ -68,12 +124,16 @@ class MainActivity : FlutterActivity() {
                     "enable" -> {
                         val minutes = call.argument<Int>("interval") ?: 15
                         requestNotifications { allowed ->
-                            if (allowed) WordNotifications.enable(this, minutes)
+                            if (allowed) {
+                                WordNotifications.enable(this, minutes)
+                                syncRecentsTask()
+                            }
                             result.success(allowed)
                         }
                     }
                     "disable" -> {
                         WordNotifications.disable(this)
+                        syncRecentsTask()
                         result.success(null)
                     }
                     "openAppSettings" -> {
@@ -141,6 +201,8 @@ class MainActivity : FlutterActivity() {
         }
         permissionDone?.invoke(false)
         permissionDone = done
+        externalActivityOpen = true
+        closeHandler.removeCallbacks(closeUi)
         requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), NOTIFY_PERMISSION)
     }
 
@@ -151,6 +213,7 @@ class MainActivity : FlutterActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode != NOTIFY_PERMISSION) return
+        externalActivityOpen = false
         val granted = grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
         permissionDone?.invoke(granted)
         permissionDone = null
@@ -194,6 +257,7 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        closeHandler.removeCallbacks(closeUi)
         tts?.shutdown()
         tts = null
         super.onDestroy()
