@@ -1,5 +1,6 @@
 package dev.vocabapp.vocabapp
 
+import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -34,17 +35,18 @@ import java.util.concurrent.Executors
  * showing a word the learner last rated Quên/Khó/Tạm (ratings 1–3), with IPA,
  * part of speech, meaning and example.
  *
- * The word changes when the screen turns on and at least [interval] minutes
- * have passed since the last change, or on "Từ khác". Ongoing, because lock
- * screens such as ColorOS hide ordinary notifications seen before locking.
+ * The word changes when [interval] minutes have passed (via [AlarmManager] or
+ * when the screen turns on), or on "Từ khác". Ongoing, because lock screens
+ * such as ColorOS hide ordinary notifications seen before locking.
  *
  * When enabled, [MainActivity] closes and removes its task from Recents once
  * the learner leaves the app, so the Flutter UI does not stay in RAM (~42 MB
  * PSS instead of ~240 MB) and swiping Recents does not kill the pinned word.
- * [WordJobService] also provides a persisted JobScheduler fallback if the OS
- * ever stops the background service.
+ * [AlarmManager] unfreezes the process on ColorOS/Hans when a rotation is due,
+ * and [WordJobService] provides a persisted JobScheduler fallback.
  */
 object WordNotifications {
+    const val ACTION_ALARM = "dev.vocabapp.vocabapp.WORD_ALARM"
     const val ACTION_NEXT = "dev.vocabapp.vocabapp.WORD_NEXT"
     const val ACTION_STOP = "dev.vocabapp.vocabapp.WORD_STOP"
     const val EXTRA_FORCE = "force"
@@ -66,6 +68,9 @@ object WordNotifications {
 
     fun interval(context: Context) = prefs(context).getInt("interval", 15)
 
+    private fun intervalMs(context: Context): Long =
+        interval(context).let { if (it <= 0) 15_000L else it * 60_000L }
+
     fun enable(context: Context, minutes: Int) {
         val coerced = minutes.coerceIn(intervals.first(), intervals.last())
         prefs(context).edit()
@@ -84,14 +89,16 @@ object WordNotifications {
         manager(context).cancel(NOTIFICATION_ID)
     }
 
-    /** Restarts the service after boot, an app update, a periodic job or a force stop. */
+    /** Restarts the service after boot, an app update, an alarm, a periodic job or a force stop. */
     fun restore(context: Context) {
         if (!enabled(context)) return
         schedulePeriodicJob(context, interval(context))
         // Ensure the notification is visible and up to date even if Android 12+
-        // blocks starting a foreground service from a background JobService.
+        // blocks starting a foreground service from a background receiver/job.
         if (due(context) || !isNotificationActive(context)) {
             runCatching { rotate(context) }
+        } else {
+            scheduleAlarm(context)
         }
         runCatching { start(context) }
     }
@@ -107,6 +114,30 @@ object WordNotifications {
 
     private fun scheduler(context: Context) =
         context.getSystemService(Context.JOB_SCHEDULER_SERVICE) as JobScheduler
+
+    private fun alarmManager(context: Context) =
+        context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+
+    /**
+     * Schedules an [AlarmManager] window at the next due time. On ColorOS 16,
+     * `OplusHansManager.checkAlarmIfRestricted` unfreezes frozen apps when an
+     * alarm fires, allowing the word rotation to proceed reliably.
+     */
+    fun scheduleAlarm(context: Context) {
+        if (!enabled(context)) return
+        val now = System.currentTimeMillis()
+        val changedAt = prefs(context).getLong("changed_at", 0L)
+        val base = if (changedAt > 0L) changedAt else now
+        val triggerAt = maxOf(now + 5_000L, base + intervalMs(context))
+        runCatching {
+            alarmManager(context).setWindow(
+                AlarmManager.RTC_WAKEUP,
+                triggerAt,
+                5_000L,
+                broadcast(context, ACTION_ALARM, 4),
+            )
+        }
+    }
 
     private fun schedulePeriodicJob(context: Context, minutes: Int) {
         val scheduler = scheduler(context)
@@ -138,6 +169,9 @@ object WordNotifications {
             scheduler.cancel(PERIODIC_JOB_ID)
             scheduler.cancel(RECOVERY_JOB_ID)
         }
+        runCatching {
+            alarmManager(context).cancel(broadcast(context, ACTION_ALARM, 4))
+        }
     }
 
     private fun isNotificationActive(context: Context): Boolean =
@@ -148,7 +182,7 @@ object WordNotifications {
     /** True when the word is due to change: [interval] minutes since the last one. */
     fun due(context: Context) =
         System.currentTimeMillis() - prefs(context).getLong("changed_at", 0) >=
-            interval(context) * 60_000L
+            intervalMs(context)
 
     private fun manager(context: Context) =
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -208,6 +242,7 @@ object WordNotifications {
     fun next(context: Context): Notification {
         val word = runCatching { pick(context) }.getOrNull()
         prefs(context).edit().putLong("changed_at", System.currentTimeMillis()).apply()
+        scheduleAlarm(context)
         return build(context, word)
     }
 
@@ -322,16 +357,15 @@ class WordService : Service() {
     }
 
     // ColorOS often skips ACTION_SCREEN_ON for backgrounded apps ("oplus skip
-    // sp"), while OplusBinderProxy replays IDisplayManagerCallback on LcdOn;
-    // keep both signals.
+    // sp"), while OplusBinderProxy replays IDisplayManagerCallback on unfreeze;
+    // keep both signals and do not gate on lastState (which may be stale if
+    // STATE_OFF occurred while the process was frozen).
     private val displays by lazy { getSystemService(DISPLAY_SERVICE) as DisplayManager }
-    private var lastState = Display.STATE_UNKNOWN
     private val displayListener = object : DisplayManager.DisplayListener {
         override fun onDisplayChanged(displayId: Int) {
             if (displayId != Display.DEFAULT_DISPLAY) return
             val state = displays.getDisplay(displayId)?.state ?: return
-            if (state == Display.STATE_ON && lastState != Display.STATE_ON) onScreenOn()
-            lastState = state
+            if (state == Display.STATE_ON) onScreenOn()
         }
         override fun onDisplayAdded(displayId: Int) = Unit
         override fun onDisplayRemoved(displayId: Int) = Unit
@@ -342,7 +376,6 @@ class WordService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        lastState = displays.getDisplay(Display.DEFAULT_DISPLAY)?.state ?: Display.STATE_UNKNOWN
         displays.registerDisplayListener(displayListener, Handler(Looper.getMainLooper()))
         registerReceiver(screenOn, IntentFilter(Intent.ACTION_SCREEN_ON))
     }
@@ -355,7 +388,10 @@ class WordService : Service() {
         // Opening the app restarts the service; keep the word unless it is due
         // or the learner just turned the feature on.
         val force = intent?.getBooleanExtra(WordNotifications.EXTRA_FORCE, false) == true
-        if (started && !force && !WordNotifications.due(this)) return START_STICKY
+        if (started && !force && !WordNotifications.due(this)) {
+            WordNotifications.scheduleAlarm(this)
+            return START_STICKY
+        }
         started = true
         // Must be foreground within seconds of startForegroundService; the
         // query is a single small SELECT.
@@ -417,7 +453,9 @@ class WordNotificationReceiver : BroadcastReceiver() {
         Thread {
             try {
                 when (intent.action) {
-                    Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED ->
+                    Intent.ACTION_BOOT_COMPLETED,
+                    Intent.ACTION_MY_PACKAGE_REPLACED,
+                    WordNotifications.ACTION_ALARM ->
                         WordNotifications.restore(app)
                     WordNotifications.ACTION_STOP -> WordNotifications.disable(app)
                     WordNotifications.ACTION_NEXT ->
