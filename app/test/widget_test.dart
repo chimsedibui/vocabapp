@@ -86,13 +86,37 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Xem phân tích'));
       await tester.pumpAndSettle();
-      expect(find.text('Gợi ý cho bạn'), findsOneWidget);
-      expect(find.text('Từ đã qua'), findsWidgets);
-      await tester.scrollUntilVisible(
-        find.text('Từ khó'),
-        300,
-        scrollable: find.byType(Scrollable).last,
-      );
+      expect(find.text('Từ đã qua'), findsOneWidget);
+      // Swipe on phones, the next button on wide screens.
+      Future<void> next() async {
+        if (size.width < 600) {
+          await tester.fling(
+            find.byType(PageView),
+            const Offset(-300, 0),
+            1000,
+          );
+        } else {
+          await tester.tap(find.byTooltip('Sau'));
+        }
+        await tester.pumpAndSettle();
+      }
+
+      for (final headline in [
+        'Từ qua tuần này',
+        'Tỉ lệ nhớ 30 ngày',
+        'Buổi nhớ tốt nhất',
+        'Từ tiến bộ trong 30 ngày',
+        'Thẻ cần ôn hôm nay',
+      ]) {
+        await next();
+        expect(find.text(headline), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      }
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Tiến độ'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Phút học'));
+      await tester.pumpAndSettle();
+      expect(find.text('Từ qua tuần này'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     });
