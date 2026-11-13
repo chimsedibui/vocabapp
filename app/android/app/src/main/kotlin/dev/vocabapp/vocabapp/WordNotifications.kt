@@ -252,21 +252,25 @@ object WordNotifications {
         manager(context).notify(NOTIFICATION_ID, next(context))
     }
 
-    private fun build(context: Context, word: Word?): Notification {
+    /** Creates the channel; idempotent, user changes to it are kept. */
+    fun ensureChannel(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = manager(context)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            manager.deleteNotificationChannel(OLD_CHANNEL)
-            manager.createNotificationChannel(
-                NotificationChannel(CHANNEL, "Từ vựng xoay vòng", NotificationManager.IMPORTANCE_DEFAULT)
-                    .apply {
-                        description = "Hiện lần lượt các từ bạn đánh giá Quên/Khó/Tạm."
-                        lockscreenVisibility = Notification.VISIBILITY_PUBLIC
-                        setSound(null, null)
-                        enableVibration(false)
-                        setShowBadge(false)
-                    },
-            )
-        }
+        manager.deleteNotificationChannel(OLD_CHANNEL)
+        manager.createNotificationChannel(
+            NotificationChannel(CHANNEL, "Từ vựng xoay vòng", NotificationManager.IMPORTANCE_DEFAULT)
+                .apply {
+                    description = "Hiện lần lượt các từ bạn đánh giá Quên/Khó/Tạm."
+                    lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                    setSound(null, null)
+                    enableVibration(false)
+                    setShowBadge(false)
+                },
+        )
+    }
+
+    private fun build(context: Context, word: Word?): Notification {
+        ensureChannel(context)
         val title: String
         val summary: String
         val body = SpannableStringBuilder()

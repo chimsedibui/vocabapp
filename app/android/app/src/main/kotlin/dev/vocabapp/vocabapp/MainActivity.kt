@@ -4,13 +4,16 @@ import android.Manifest
 import android.app.ActivityManager
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.speech.tts.TextToSpeech
 import android.widget.Toast
 import io.flutter.embedding.android.FlutterActivity
@@ -137,10 +140,11 @@ class MainActivity : FlutterActivity() {
                         result.success(null)
                     }
                     "openAppSettings" -> {
-                        startActivity(
-                            Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                                .setData(android.net.Uri.fromParts("package", packageName, null)),
-                        )
+                        startActivity(appDetailsIntent())
+                        result.success(null)
+                    }
+                    "openNotificationSettings" -> {
+                        openNotificationSettings()
                         result.success(null)
                     }
                     else -> result.notImplemented()
@@ -186,6 +190,31 @@ class MainActivity : FlutterActivity() {
             val flags = PendingIntent.FLAG_UPDATE_CURRENT or
                 (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0)
             session.commit(PendingIntent.getActivity(this, 0, intent, flags).intentSender)
+        }
+    }
+
+    private fun appDetailsIntent() =
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+            .setData(Uri.fromParts("package", packageName, null))
+
+    /**
+     * Opens this app's notification settings, where the learner can allow the
+     * pinned word on the lock screen. Some lock screens (e.g. ColorOS 16) hide
+     * it unless allowed here; the app cannot change that itself.
+     */
+    private fun openNotificationSettings() {
+        // The channel must exist for its settings to be listed.
+        WordNotifications.ensureChannel(this)
+        val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        } else {
+            appDetailsIntent()
+        }
+        try {
+            startActivity(intent)
+        } catch (_: ActivityNotFoundException) {
+            startActivity(appDetailsIntent())
         }
     }
 

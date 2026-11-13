@@ -77,6 +77,14 @@ class _NotificationSettingsState extends State<NotificationSettings>
     await _load();
   }
 
+  Future<void> _openSettings(Future<void> Function() open) async {
+    try {
+      await open();
+    } catch (_) {
+      /* No settings screen on this device. */
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Card(
     margin: EdgeInsets.zero,
@@ -131,13 +139,27 @@ class _NotificationSettingsState extends State<NotificationSettings>
             'Máy OPPO/OnePlus/Realme: bật "Tự khởi động" và "Hoạt động nền" để từ tự hiện lại sau khi khởi động máy.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
-          TextButton.icon(
-            onPressed: () =>
-                WordNotifications.openAppSettings().catchError((_) {
-                  /* No settings screen on this device. */
-                }),
-            icon: const Icon(Icons.settings_outlined),
-            label: const Text('Cài đặt ứng dụng'),
+          const SizedBox(height: 4),
+          Text(
+            'Không thấy từ trên màn hình khóa? Mở "Cài đặt thông báo" và cho phép hiện trên màn hình khóa.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          Wrap(
+            spacing: 8,
+            children: [
+              TextButton.icon(
+                onPressed: () =>
+                    _openSettings(WordNotifications.openNotificationSettings),
+                icon: const Icon(Icons.notifications_outlined),
+                label: const Text('Cài đặt thông báo'),
+              ),
+              TextButton.icon(
+                onPressed: () =>
+                    _openSettings(WordNotifications.openAppSettings),
+                icon: const Icon(Icons.settings_outlined),
+                label: const Text('Cài đặt ứng dụng'),
+              ),
+            ],
           ),
         ],
       ),
