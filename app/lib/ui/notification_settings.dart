@@ -38,7 +38,9 @@ class _NotificationSettingsState extends State<NotificationSettings>
       if (!mounted) return;
       setState(() {
         _enabled = s.enabled;
-        _interval = s.interval;
+        _interval = WordNotifications.intervals.contains(s.interval)
+            ? s.interval
+            : 15;
         _allowed = s.allowed;
       });
     } catch (_) {
