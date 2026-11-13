@@ -9,16 +9,18 @@ import 'package:flutter/services.dart';
 /// Runs natively, so it keeps going while the app is closed.
 class WordNotifications {
   static const _channel = MethodChannel('vocabapp/notify');
-  static const intervals = [10, 15, 20];
+  static const intervals = [1, 3, 5, 10, 15, 20];
 
   static bool get supported => Platform.isAndroid;
 
-  static Future<({bool enabled, int interval, bool allowed})> status() async {
+  static Future<({bool enabled, int interval, bool allowed, bool keepAlive})>
+  status() async {
     final map = await _channel.invokeMapMethod<String, Object?>('status');
     return (
       enabled: map?['enabled'] == true,
       interval: map?['interval'] as int? ?? 15,
       allowed: map?['allowed'] == true,
+      keepAlive: map?['keepAlive'] == true,
     );
   }
 
@@ -32,6 +34,11 @@ class WordNotifications {
   /// Opens this app's system settings page (battery, auto-launch).
   static Future<void> openAppSettings() =>
       _channel.invokeMethod('openAppSettings');
+
+  /// Opens the notification access page for the keep-alive listener, which
+  /// stops ColorOS from freezing the app so the word stays on the lock screen.
+  static Future<void> openKeepAliveSettings() =>
+      _channel.invokeMethod('openKeepAliveSettings');
 
   /// Opens this app's notification settings (lock screen display, channel).
   static Future<void> openNotificationSettings() =>

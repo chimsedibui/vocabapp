@@ -10,7 +10,7 @@ class NotificationSettings extends StatefulWidget {
 
 class _NotificationSettingsState extends State<NotificationSettings>
     with WidgetsBindingObserver {
-  bool _enabled = false, _allowed = true, _busy = true;
+  bool _enabled = false, _allowed = true, _keepAlive = false, _busy = true;
   int _interval = 15;
 
   @override
@@ -42,6 +42,7 @@ class _NotificationSettingsState extends State<NotificationSettings>
             ? s.interval
             : 15;
         _allowed = s.allowed;
+        _keepAlive = s.keepAlive;
       });
     } catch (_) {
       /* Leaves the switch off. */
@@ -97,10 +98,6 @@ class _NotificationSettingsState extends State<NotificationSettings>
             'Thông báo từ vựng',
             style: Theme.of(context).textTheme.titleLarge,
           ),
-          const SizedBox(height: 8),
-          const Text(
-            'Ghim một từ Quên/Khó/Tạm lên màn hình khóa. Từ đổi khi bạn mở màn hình.',
-          ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             value: _enabled && _allowed,
@@ -134,16 +131,26 @@ class _NotificationSettingsState extends State<NotificationSettings>
                     }
                   },
           ),
-          const SizedBox(height: 12),
-          Text(
-            'Máy OPPO/OnePlus/Realme: bật "Tự khởi động" và "Hoạt động nền" để từ tự hiện lại sau khi khởi động máy.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Không thấy từ trên màn hình khóa? Mở "Cài đặt thông báo" và cho phép hiện trên màn hình khóa.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
+          if (_enabled && _allowed)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                _keepAlive ? Icons.lock_clock : Icons.lock_clock_outlined,
+              ),
+              title: const Text('Giữ từ trên màn hình khóa'),
+              subtitle: _keepAlive
+                  ? null
+                  : const Text('Cần trên OPPO/OnePlus/Realme'),
+              trailing: _keepAlive
+                  ? const Icon(Icons.check)
+                  : FilledButton.tonal(
+                      onPressed: () => _openSettings(
+                        WordNotifications.openKeepAliveSettings,
+                      ),
+                      child: const Text('Bật'),
+                    ),
+            ),
+          const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             children: [

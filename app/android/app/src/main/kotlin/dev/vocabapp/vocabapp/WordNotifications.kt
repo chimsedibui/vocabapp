@@ -1,6 +1,7 @@
 package dev.vocabapp.vocabapp
 
 import android.app.AlarmManager
+import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -23,12 +24,16 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.service.notification.NotificationListenerService
+import android.service.notification.StatusBarNotification
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.StyleSpan
+import android.util.Log
 import android.view.Display
 import java.io.File
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * Pinned word on the lock screen: [WordService] keeps one ongoing notification
@@ -51,9 +56,10 @@ object WordNotifications {
     const val ACTION_STOP = "dev.vocabapp.vocabapp.WORD_STOP"
     const val EXTRA_FORCE = "force"
     const val NOTIFICATION_ID = 4101
+    private const val ALT_NOTIFICATION_ID = 4104
     private const val PERIODIC_JOB_ID = 4102
     private const val RECOVERY_JOB_ID = 4103
-    val intervals = listOf(10, 15, 20)
+    val intervals = listOf(1, 3, 5, 10, 15, 20)
 
     // v2: DEFAULT importance; LOW ("silent") is hidden on most lock screens.
     private const val CHANNEL = "word_rotation_v2"
@@ -65,6 +71,13 @@ object WordNotifications {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     fun enabled(context: Context) = prefs(context).getBoolean("enabled", false)
+
+    /** True when the learner granted notification access to [WordKeepAliveService]. */
+    fun keepAlive(context: Context): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1 &&
+            manager(context).isNotificationListenerAccessGranted(
+                ComponentName(context, WordKeepAliveService::class.java),
+            )
 
     fun interval(context: Context) = prefs(context).getInt("interval", 15)
 
@@ -87,6 +100,33 @@ object WordNotifications {
         cancelJobs(context)
         context.stopService(Intent(context, WordService::class.java))
         manager(context).cancel(NOTIFICATION_ID)
+        manager(context).cancel(ALT_NOTIFICATION_ID)
+        current = null
+    }
+
+    /** Id the word is currently posted under; alternates, see [repost]. */
+    fun notificationId(context: Context) =
+        prefs(context).getInt("notification_id", NOTIFICATION_ID)
+
+    // Last posted word, so [repost] can show it again without picking another.
+    @Volatile
+    private var current: Notification? = null
+
+    /**
+     * Posts the current word again under the other id, as a new notification.
+     * Lock screens such as ColorOS 16 only show notifications posted after the
+     * screen locked; one the learner already saw in the shade stays hidden
+     * even when ongoing. Called once per lock; [fresh] picks a new word.
+     */
+    fun repost(service: WordService, fresh: Boolean) {
+        val notification = current.takeUnless { fresh } ?: next(service)
+        val old = notificationId(service)
+        val id = if (old == NOTIFICATION_ID) ALT_NOTIFICATION_ID else NOTIFICATION_ID
+        prefs(service).edit().putInt("notification_id", id).commit()
+        service.foreground(id, notification)
+        // startForeground with a new id detaches the old notification.
+        manager(service).cancel(old)
+        Log.i("WordNotifications", "reposted as $id (fresh=$fresh)")
     }
 
     /** Restarts the service after boot, an app update, an alarm, a periodic job or a force stop. */
@@ -131,7 +171,7 @@ object WordNotifications {
         val triggerAt = maxOf(now + 5_000L, base + intervalMs(context))
         runCatching {
             alarmManager(context).setWindow(
-                AlarmManager.RTC_WAKEUP,
+                AlarmManager.RTC,
                 triggerAt,
                 5_000L,
                 broadcast(context, ACTION_ALARM, 4),
@@ -176,7 +216,9 @@ object WordNotifications {
 
     private fun isNotificationActive(context: Context): Boolean =
         runCatching {
-            manager(context).activeNotifications.any { it.id == NOTIFICATION_ID }
+            manager(context).activeNotifications.any {
+                it.id == NOTIFICATION_ID || it.id == ALT_NOTIFICATION_ID
+            }
         }.getOrDefault(false)
 
     /** True when the word is due to change: [interval] minutes since the last one. */
@@ -243,13 +285,13 @@ object WordNotifications {
         val word = runCatching { pick(context) }.getOrNull()
         prefs(context).edit().putLong("changed_at", System.currentTimeMillis()).apply()
         scheduleAlarm(context)
-        return build(context, word)
+        return build(context, word).also { current = it }
     }
 
     /** Shows the next word in the pinned notification. */
     fun rotate(context: Context) {
         if (!manager(context).areNotificationsEnabled()) return
-        manager(context).notify(NOTIFICATION_ID, next(context))
+        manager(context).notify(notificationId(context), next(context))
     }
 
     /** Creates the channel; idempotent, user changes to it are kept. */
@@ -354,9 +396,30 @@ class WordService : Service() {
     private var started = false
 
     // One worker: a second screen-on event sees the first one's change time.
-    private val worker = Executors.newSingleThreadExecutor()
+    private val worker = Executors.newSingleThreadScheduledExecutor()
 
-    private fun onScreenOn() = worker.execute {
+    private val keyguard by lazy { getSystemService(KEYGUARD_SERVICE) as KeyguardManager }
+
+    // Touched only on the worker thread: the word was posted again since the
+    // device last locked.
+    private var postedWhileLocked = false
+
+    private fun onScreenEvent() = worker.execute { refresh() }
+
+    /**
+     * Once per lock, posts the word again (see [WordNotifications.repost]);
+     * a notification posted while the keyguard shows counts as unseen there.
+     * Otherwise shows the next word when it is due.
+     */
+    private fun refresh() {
+        if (!WordNotifications.enabled(this)) return
+        if (!keyguard.isKeyguardLocked) {
+            postedWhileLocked = false
+        } else if (!postedWhileLocked) {
+            postedWhileLocked = true
+            runCatching { WordNotifications.repost(this, fresh = WordNotifications.due(this)) }
+            return
+        }
         if (WordNotifications.due(this)) WordNotifications.rotate(this)
     }
 
@@ -368,20 +431,39 @@ class WordService : Service() {
     private val displayListener = object : DisplayManager.DisplayListener {
         override fun onDisplayChanged(displayId: Int) {
             if (displayId != Display.DEFAULT_DISPLAY) return
-            val state = displays.getDisplay(displayId)?.state ?: return
-            if (state == Display.STATE_ON) onScreenOn()
+            onScreenEvent()
         }
         override fun onDisplayAdded(displayId: Int) = Unit
         override fun onDisplayRemoved(displayId: Int) = Unit
     }
-    private val screenOn = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) = onScreenOn()
+    private val screenEvents = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) = onScreenEvent()
     }
 
     override fun onCreate() {
         super.onCreate()
         displays.registerDisplayListener(displayListener, Handler(Looper.getMainLooper()))
-        registerReceiver(screenOn, IntentFilter(Intent.ACTION_SCREEN_ON))
+        registerReceiver(
+            screenEvents,
+            IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_SCREEN_OFF)
+            },
+        )
+        // ColorOS Hans freezes the process about a minute after the app leaves
+        // the foreground, foreground service or not, and drops the signals
+        // above meanwhile. It unfreezes it for a few seconds now and then, e.g.
+        // when the screen turns on; this poll (suspended while frozen, so free
+        // then) runs as soon as that happens.
+        worker.scheduleWithFixedDelay({ runCatching { refresh() } }, 2, 2, TimeUnit.SECONDS)
+    }
+
+    fun foreground(id: Int, notification: Notification) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(id, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(id, notification)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -399,16 +481,7 @@ class WordService : Service() {
         started = true
         // Must be foreground within seconds of startForegroundService; the
         // query is a single small SELECT.
-        val notification = WordNotifications.next(this)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(
-                WordNotifications.NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
-            )
-        } else {
-            startForeground(WordNotifications.NOTIFICATION_ID, notification)
-        }
+        foreground(WordNotifications.notificationId(this), WordNotifications.next(this))
         return START_STICKY
     }
 
@@ -421,12 +494,32 @@ class WordService : Service() {
 
     override fun onDestroy() {
         displays.unregisterDisplayListener(displayListener)
-        unregisterReceiver(screenOn)
+        unregisterReceiver(screenEvents)
         worker.shutdown()
         super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+}
+
+/**
+ * Optional notification access. ColorOS Hans freezes the process about a
+ * minute after the app leaves the foreground (foreground service or not), so
+ * [WordService] could not post the word again when the device locks and the
+ * lock screen hides it. While the learner grants this access, the system keeps
+ * this listener bound, which keeps the process running. It ignores every
+ * notification it is told about.
+ */
+class WordKeepAliveService : NotificationListenerService() {
+    override fun onListenerConnected() {
+        // Bound again after a reboot or force stop: bring the pinned word back.
+        val app = applicationContext
+        Thread { runCatching { WordNotifications.restore(app) } }.start()
+    }
+
+    override fun onNotificationPosted(sbn: StatusBarNotification?) = Unit
+
+    override fun onNotificationRemoved(sbn: StatusBarNotification?) = Unit
 }
 
 /**

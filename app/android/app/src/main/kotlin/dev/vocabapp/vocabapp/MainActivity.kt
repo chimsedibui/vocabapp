@@ -5,6 +5,7 @@ import android.app.ActivityManager
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.ActivityNotFoundException
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
@@ -123,6 +124,7 @@ class MainActivity : FlutterActivity() {
                         "enabled" to WordNotifications.enabled(this),
                         "interval" to WordNotifications.interval(this),
                         "allowed" to notificationsAllowed(),
+                        "keepAlive" to WordNotifications.keepAlive(this),
                     ))
                     "enable" -> {
                         val minutes = call.argument<Int>("interval") ?: 15
@@ -145,6 +147,10 @@ class MainActivity : FlutterActivity() {
                     }
                     "openNotificationSettings" -> {
                         openNotificationSettings()
+                        result.success(null)
+                    }
+                    "openKeepAliveSettings" -> {
+                        openKeepAliveSettings()
                         result.success(null)
                     }
                     else -> result.notImplemented()
@@ -215,6 +221,32 @@ class MainActivity : FlutterActivity() {
             startActivity(intent)
         } catch (_: ActivityNotFoundException) {
             startActivity(appDetailsIntent())
+        }
+    }
+
+    /** Opens the notification access page for [WordKeepAliveService]. */
+    private fun openKeepAliveSettings() {
+        val component = ComponentName(this, WordKeepAliveService::class.java)
+        val detail = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
+                .putExtra(
+                    Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME,
+                    component.flattenToString(),
+                )
+        } else {
+            null
+        }
+        for (intent in listOfNotNull(
+            detail,
+            Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS),
+            appDetailsIntent(),
+        )) {
+            try {
+                startActivity(intent)
+                return
+            } catch (_: ActivityNotFoundException) {
+                // Try the next, more general page.
+            }
         }
     }
 

@@ -40,6 +40,18 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Pinned vocabulary word on the lock screen, changed when the screen turns on"/>
         </service>
+        <!-- Optional "notification access": the system keeps it bound, so
+             ColorOS does not freeze the process and the pinned word can be
+             posted again when the device locks. Reads no notifications. -->
+        <service
+            android:name=".WordKeepAliveService"
+            android:label="Giữ từ vựng trên màn hình khóa"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService"/>
+            </intent-filter>
+        </service>
         <service
             android:name=".WordJobService"
             android:permission="android.permission.BIND_JOB_SERVICE"
